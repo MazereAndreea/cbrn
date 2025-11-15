@@ -6,4 +6,10 @@
 *:*Zone.Identifier$
 *.Identifier
 /src/sim_env/models/humanSubjects
-/src/sim_env/models/legacy
+/src/sim_env/models/legacy/conf
+/src/sim_env/models/legacy/control
+/src/sim_env/models/legacy/scripts
+/src/sim_env/models/legacy/sub0
+/src/sim_env/models/legacy/worlds
+*.png
+src/sim_env/models/legacy/human/meshes/human.dae

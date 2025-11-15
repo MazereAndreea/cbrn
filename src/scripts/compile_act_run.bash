@@ -3,6 +3,10 @@
 # 1. Mergi la rădăcina workspace-ului
 cd ~/cbrn_ws
 
+source /opt/ros/jazzy/setup.bash
+
+export GZ_SIM_RESOURCE_PATH=$GZ_SIM_RESOURCE_PATH:~/cbrn_ws/install/sim_env/share/sim_env/models
+
 # 2. ȘTERGE build-ul și instalarea veche
 rm -rf build install log
 
