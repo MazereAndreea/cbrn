@@ -46,12 +46,41 @@ Comanda (`colcon build`) va citi fișierul (`sim_env/CMakeLists.txt`) și va cop
 # Mergi la rădăcina workspace-ului
 cd ~/cbrn_ws
 
-# Compilează
-colcon build
-
-# Activează mediul local al proiectului:
+# Compilează (pentru dezvoltare)
+colcon build --symlink-install 
 source install/setup.bash
 
-# Lansează simularea
-ros2 launch sim_env start_sim.launch.py
+```
+## Terminal 1 (Gazebo simulation):
+
+```bash
+# Pornește gazebo headless -s (fara fereastra 3D), -v 4 (logging detaliat)
+gz sim -s -v 4 empty.sdf
+```
+
+## Terminal 2 (Creare model humanSubject01):
+
+```bash
+# Surseaza ROS2
+source ~/cbrn_ws/install/setup.bash
+
+# Ruleaza pentru a crea modelul in lumea gazebo
+ros2 run ros_gz_sim create \
+  -file ~/cbrn_ws/src/human-gazebo/humanSubject01/humanSubject01_66dof_colored.urdf \
+  -name humanSubject \
+  -x 0 -y 0 -z 1
+
+```
+## Verifica ca modelul exista:
+
+```bash
+ros2 topic list
+
+ros2 topic echo /world/empty/model/humanSubject/pose
+
+```
+## Deschide RViz2 pentru vizualizare 3D
+
+```bash
+rviz2
 ```
