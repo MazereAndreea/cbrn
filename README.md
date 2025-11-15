@@ -1,0 +1,57 @@
+# 🤖 Proiect de Licență: Robot Autonom CBRN
+
+Acest repository conține workspace-ul ROS 2 pentru proiectul de licență ce vizează dezvoltarea unui robot autonom pentru intervenții în medii CBRN (Chimice, Biologice, Radiologice, Nucleare).
+
+Scopul principal al robotului este să navigheze autonom, să identifice pacienți și să realizeze un triaj medical de bază prin **analiza posturii (pose estimation)** și alte detalii medicale.
+
+## 🎯 Obiectivul Acestui Workspace
+
+Acest workspace (`cbrn_ws`) conține pachetul `sim_env`, al cărui scop este crearea unui **mediu de simulare 3D** în Gazebo. Acest simulator ne permite să testăm și să validăm algoritmii de percepție (modelele de *pose estimation*) înainte de a-i implementa pe un robot fizic.
+
+Mediul de simulare include:
+* Un robot simplu, echipat cu o cameră.
+* O "lume" (`.world`) care simulează un spațiu închis (o cameră cu pereți).
+* Un model 3D al unui pacient, descărcat de pe [human-gazebo](https://github.com/robotology/human-gazebo) și rotit pentru a simula o persoană culcată.
+
+---
+
+## 🛠️ Mediul de Dezvoltare și Dependințe
+
+Acest proiect a fost configurat și testat folosind următorul mediu. Toate problemele de configurare (dependințe lipsă, conflicte de mediu) au fost rezolvate.
+
+* **Sistem de Operare:** Ubuntu 24.04 (rulat prin WSL)
+* **Distribuție ROS 2:** ROS 2 Jazzy (folosind instalarea binară din `/opt/ros/jazzy/`)
+* **Simulator:** Ignition Gazebo (pachetul `ros-jazzy-ros-gz-sim`)
+
+### Dependințe Cheie
+
+Pentru a compila și rula acest pachet, asigurați-vă că aveți instalate pachetele de bază ROS 2 și pachetele specifice Gazebo:
+
+```bash
+# Instalează pachetele de bază
+sudo apt install ros-jazzy-desktop
+
+# Instalează pachetele specifice pentru simularea cu Gz (Gazebo)
+sudo apt install ros-jazzy-ros-gz-sim
+sudo apt install ros-jazzy-ros-gz-bridge
+
+# Instalează Xacro (pentru procesarea fișierelor robotului)
+sudo apt install ros-jazzy-xacro
+```
+## 🚀 Instalare și Rulare
+### Compilarea Workspace-ului
+Comanda (`colcon build`) va citi fișierul (`sim_env/CMakeLists.txt`) și va copia automat fișierele (`launch`), (`urdf`), (`worlds`) și (`models`) în folderul (`install`).
+
+```bash
+# Mergi la rădăcina workspace-ului
+cd ~/cbrn_ws
+
+# Compilează
+colcon build
+
+# Activează mediul local al proiectului:
+source install/setup.bash
+
+# Lansează simularea
+ros2 launch sim_env start_sim.launch.py
+```
