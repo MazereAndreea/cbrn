@@ -1,3 +1,9 @@
 *build
 *install
 *log
+*.env
+*.config
+*:*Zone.Identifier$
+*.Identifier
+/src/sim_env/models/humanSubjects
+/src/sim_env/models/legacy
