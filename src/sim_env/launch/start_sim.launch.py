@@ -62,8 +62,6 @@ def generate_launch_description():
             # Folosim 'sensor_msgs/msg/Image' (sintaxa ROS 2 corectă)
             '/my_camera@sensor_msgs/msg/Image[gz.msgs.Image',
             '/my_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo'
-            '/my_camera@sensor_msgs/msg/Image[gz.msgs.Image]',
-            '/my_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo]'
         ],
         output='screen'
     )
