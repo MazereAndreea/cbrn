@@ -5,11 +5,8 @@
 *.config
 *:*Zone.Identifier$
 *.Identifier
-/src/sim_env/models/humanSubjects
-/src/sim_env/models/legacy/conf
-/src/sim_env/models/legacy/control
-/src/sim_env/models/legacy/scripts
-/src/sim_env/models/legacy/sub0
-/src/sim_env/models/legacy/worlds
 *.png
-src/sim_env/models/legacy/human/meshes/human.dae
+/src/cbrn_perception/test
+*.pyc
+src/cbrn_perception/cbrn_perception/__init__.py
+/src/sim_env/models
