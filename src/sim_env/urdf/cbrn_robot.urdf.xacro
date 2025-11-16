@@ -26,7 +26,7 @@
     </visual>
   </link>
 
-  <!-- <gazebo reference="camera_link">
+  <gazebo reference="camera_link">
     <sensor type="camera" name="my_camera_sensor">
       <update_rate>30.0</update_rate>
       <camera>
@@ -42,12 +42,12 @@
         </clip>
       </camera>
        -->
-      <!-- <plugin name="gz::sim::systems::Camera" filename="libgz-sim-camera-system.so">
+      <plugin name="gz::sim::systems::Camera" filename="libgz-sim-camera-system.so">
         <camera_name>my_camera</camera_name>
         <topic>/my_camera</topic>
         <camera_info_topic>/my_camera/camera_info</camera_info_topic>
-      </plugin> -->
-    <!-- </sensor>
-  </gazebo> -->
+      </plugin>
+    </sensor>
+  </gazebo>
   
   </robot>
