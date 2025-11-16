@@ -23,7 +23,7 @@ def generate_launch_description():
             )
         ]),
         launch_arguments={
-            'gz_args': f'-v 4 -r --headless {world_path}'
+            'gz_args': f'-v 4 -r {world_path}'
         }.items()
     )
 
@@ -31,28 +31,28 @@ def generate_launch_description():
     # Fara ele, gazebo simulation ruleaza, cu ele, se blocheaza
 
     # # =========== 2. Pornește Robot State Publisher ===========
-    # node_robot_state_publisher = Node(
-    #     package='robot_state_publisher',
-    #     executable='robot_state_publisher',
-    #     output='screen',
-    #     parameters=[{'robot_description': robot_description_xml, 'use_sim_time': True }]
-    # )
+    node_robot_state_publisher = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        output='screen',
+        parameters=[{'robot_description': robot_description_xml, 'use_sim_time': True }]
+    )
 
-    # # =========== 3. Spawnează Robotul ===========
-    # spawn_entity = TimerAction(
-    #     period=3.0,  # așteaptă 3 secunde
-    #     actions=[Node(
-    #         package='ros_gz_sim',
-    #         executable='create',
-    #         arguments=[
-    #             '-world', 'cbrn_world',
-    #             '-topic', 'robot_description',
-    #             '-entity', 'cbrn_robot',
-    #             '-x', '0', '-y', '0', '-z', '0.5'
-    #         ],
-    #         output='screen'
-    #     )]
-    # )
+    # =========== 3. Spawnează Robotul ===========
+    spawn_entity = TimerAction(
+        period=3.0,  # așteaptă 3 secunde
+        actions=[Node(
+            package='ros_gz_sim',
+            executable='create',
+            arguments=[
+                '-world', 'cbrn_world',
+                '-topic', 'robot_description',
+                '-entity', 'cbrn_robot',
+                '-x', '0', '-y', '0', '-z', '0.5'
+            ],
+            output='screen'
+        )]
+    )
 
     # =========== 4. Pornește "Puntea" (Bridge) pentru Cameră ===========
     bridge_node = Node(
