@@ -1,7 +1,7 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, TimerAction
+from launch.actions import IncludeLaunchDescription, TimerAction, ExecuteProcess
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node 
 import xacro
@@ -38,35 +38,52 @@ def generate_launch_description():
         parameters=[{'robot_description': robot_description_xml, 'use_sim_time': True }]
     )
 
-    # =========== 3. Spawnează Robotul ===========
-    spawn_entity = TimerAction(
-        period=3.0,  # așteaptă 3 secunde
-        actions=[Node(
-            package='ros_gz_sim',
-            executable='create',
-            arguments=[
-                '-world', 'cbrn_world',
-                '-topic', 'robot_description',
-                '-entity', 'cbrn_robot',
-                '-x', '0', '-y', '0', '-z', '0.5'
-            ],
-            output='screen'
-        )]
-    )
+     # =========== 3. Spawnează Robotul ===========
+    # spawn_entity = TimerAction(
+    #     period=3.0,
+    #     actions=[Node(
+    #         package='ros_gz_sim',
+    #         executable='create',
+    #         arguments=[
+    #             '-world', 'cbrn_world',
+    #             '-file', os.path.join(pkg_dir, 'models', 'cbrn_robot', 'model.sdf'),
+    #             '-entity', 'cbrn_robot',
+    #             '-x', '0', '-y', '0', '-z', '0.5'
+    #         ],
+    #         output='screen'
+    #     )]
+    # )
 
-    # =========== 4. Pornește "Puntea" (Bridge) pentru Cameră ===========
-    bridge_node = Node(
+
+    image_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
+        name='image_bridge',
         arguments=[
-            # Folosim 'sensor_msgs/msg/Image' (sintaxa ROS 2 corectă)
-            '/my_camera@sensor_msgs/msg/Image[gz.msgs.Image',
-            '/my_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo'
+            "/my_camera@sensor_msgs/msg/Image[gz.msgs.Image",
+            "/my_camera/depth@sensor_msgs/msg/Image[gz.msgs.Image",
+            "/my_camera/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked"
         ],
         output='screen'
     )
 
-   
+
+    # =========== 4. Pornește "Puntea" (Bridge) pentru Cameră ===========
+    # bridge_node = Node(
+    #     package='ros_gz_bridge',
+    #     executable='parameter_bridge',
+    #     arguments=[
+    #         '/my_camera@sensor_msgs/msg/Image[gz.msgs.Image]',
+    #         '/my_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo]'
+    #     ],
+    #     output='screen'
+    # )
+
+    # rviz = ExecuteProcess(
+    #     cmd=['rviz2', '-d', rviz_config_file],
+    #     output='screen'
+    # )
+
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
@@ -86,8 +103,7 @@ def generate_launch_description():
     return LaunchDescription([
         gz_sim,
         node_robot_state_publisher,
-        spawn_entity,
-        # bridge_node,
-        # rviz_node,
-        # pose_estimator_node, # Adaugă nodul de percepție la lista de lansare
+        image_bridge,
+        rviz_node,
+        pose_estimator_node,
     ])

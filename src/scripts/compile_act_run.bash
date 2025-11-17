@@ -1,5 +1,10 @@
 #!/bin/bash
 
+pkill -f gz
+pkill -f gzserver
+pkill -f gzclient
+
+pkill -f ros2
 # 1. Mergi la rădăcina workspace-ului
 cd ~/cbrn_ws
 
