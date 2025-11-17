@@ -60,9 +60,9 @@ def generate_launch_description():
         executable='parameter_bridge',
         name='image_bridge',
         arguments=[
-            "/my_camera@sensor_msgs/msg/Image[gz.msgs.Image",
-            "/my_camera/depth@sensor_msgs/msg/Image[gz.msgs.Image",
-            "/my_camera/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked"
+            "/my_camera@sensor_msgs/msg/Image@gz.msgs.Image",
+            "/my_camera/depth@sensor_msgs/msg/Image@gz.msgs.Image",
+            "/my_camera/points@sensor_msgs/msg/PointCloud2@gz.msgs.PointCloudPacked"
         ],
         output='screen'
     )

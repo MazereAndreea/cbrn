@@ -24,6 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             'pose_estimator_node = cbrn_perception.pose_estimator_node:main',
+            'nod_depth_debug.py = cbrn_perception.nod_depth_debug:main',
         ],
     },
 )
