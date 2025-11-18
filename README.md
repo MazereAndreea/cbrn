@@ -39,48 +39,18 @@ sudo apt install ros-jazzy-ros-gz-bridge
 sudo apt install ros-jazzy-xacro
 ```
 ## 🚀 Instalare și Rulare
-### Compilarea Workspace-ului
+### Compilarea Workspace-ului, activarea mediului de lucru și rulare
 Comanda (`colcon build`) va citi fișierul (`sim_env/CMakeLists.txt`) și va copia automat fișierele (`launch`), (`urdf`), (`worlds`) și (`models`) în folderul (`install`).
 
 ```bash
 # Mergi la rădăcina workspace-ului
-cd ~/cbrn_ws
+cd ~/cbrn_ws/src/scripts
 
-# Compilează (pentru dezvoltare)
-colcon build --symlink-install 
-source install/setup.bash
-
-```
-## Terminal 1 (Gazebo simulation):
-
-```bash
-# Pornește gazebo headless -s (fara fereastra 3D), -v 4 (logging detaliat)
-gz sim -s -v 4 empty.sdf
+# Folosește scriptul compile_act_run.bash
+./compile_act_run
 ```
 
-## Terminal 2 (Creare model humanSubject01):
+Interfata Gazebo Sim 8 + Rviz2 pentru vizualizarea lumii (`cbrn_world`) in Gazebo și perspectiva camerei in (`Rviz2`):
 
-```bash
-# Surseaza ROS2
-source ~/cbrn_ws/install/setup.bash
+<img width="1920" height="875" alt="gazebo_rviz" src="https://github.com/user-attachments/assets/465f3837-a714-42bc-a3f4-38670ed6a12c" />
 
-# Ruleaza pentru a crea modelul in lumea gazebo
-ros2 run ros_gz_sim create \
-  -file ~/cbrn_ws/src/human-gazebo/humanSubject01/humanSubject01_66dof_colored.urdf \
-  -name humanSubject \
-  -x 0 -y 0 -z 1
-
-```
-## Verifica ca modelul exista:
-
-```bash
-ros2 topic list
-
-ros2 topic echo /world/empty/model/humanSubject/pose
-
-```
-## Deschide RViz2 pentru vizualizare 3D
-
-```bash
-rviz2
-```
