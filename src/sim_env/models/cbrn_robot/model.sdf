@@ -38,7 +38,7 @@
       <pose>0.5 0 1.2 0 1.17 3.14159</pose>
 
       <sensor name="rgb_camera" type="camera">
-        <topic>/my_camera</topic>
+        <topic>/camera</topic>
 
         <camera>
           <image>

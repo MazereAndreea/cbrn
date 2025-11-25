@@ -33,9 +33,14 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
-# Instalează folderul 'urdf'
 install(DIRECTORY
-  urdf
+  config
+  DESTINATION share/${PROJECT_NAME}
+)
+
+# Instalează folderul 'description'
+install(DIRECTORY
+  description
   DESTINATION share/${PROJECT_NAME}
 )
 

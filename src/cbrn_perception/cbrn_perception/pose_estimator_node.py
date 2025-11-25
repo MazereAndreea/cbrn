@@ -25,7 +25,7 @@ class PoseEstimatorNode(Node):
         # Se abonează la topicul camerei din simulator
         self.subscription = self.create_subscription(
             Image,
-            '/my_camera',
+            '/camera',
             self.image_callback,
             10)
 
