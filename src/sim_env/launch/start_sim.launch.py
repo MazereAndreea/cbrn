@@ -46,14 +46,13 @@ def generate_launch_description():
         }.items()
     )
 
-    # robot_description = Command(['ros2 param get --hide-type /robot_state_publisher robot_description'])
-    
+    params = {'robot_description': robot_description_xml}
     # # =========== 2. Pornește Robot State Publisher ===========
     node_robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
         output='screen',
-        parameters=[{'robot_description': robot_description_xml, 'use_sim_time': True }]
+        parameters=[params]
     )
 
     #  # =========== 3. Spawnează Robotul ===========
