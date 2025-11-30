@@ -28,7 +28,10 @@ def generate_launch_description():
     rviz_config_file = os.path.join(pkg_dir, 'rviz', 'sim.rviz')
     world_path = os.path.join(pkg_dir, 'worlds', 'cbrn_world.world')
     xacro_file = os.path.join(pkg_dir, 'description', 'cbrn_robot.urdf.xacro')
-    robot_description_xml = xacro.process_file(xacro_file, mappings={'use_sdf': 'true'}).toxml()
+    robot_description_xml = xacro.process_file(
+        xacro_file,
+        mappings={'use_sdf': 'true', 'sim_mode': 'true'}
+    ).toxml()
     robot_description_sdf = urdf_to_sdf(robot_description_xml)
     sdf_path = os.path.join(pkg_dir, 'description', 'cbrn_robot.sdf')
     with open(sdf_path, 'w') as sdf_file:
@@ -94,7 +97,7 @@ def generate_launch_description():
         executable='parameter_bridge',
         name='ros_gz_bridge',
         output='screen',
-        parameters=[{"config_file": bridge_params}]
+        parameters=[{"config_file": bridge_params}] #don't change this
     )
     
 
@@ -119,6 +122,45 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}],
         output='screen'
     )
+
+    # controller_params_file = os.path.join(pkg_dir,'config','my_controllers.yaml')
+
+    # controller_manager = Node(
+    #     package="controller_manager",
+    #     executable="ros2_control_node",
+    #     parameters=[{'robot_description': robot_description_xml},
+    #                 controller_params_file]
+    # )
+
+    person_follower_node = Node(
+        package='cbrn_perception',
+        executable='person_follower',
+        name='person_follower',
+        parameters=[{'use_sim_time': True}],
+        output='screen'
+    )
+
+    diff_drive_spawner = TimerAction(
+        period=10.0, # Așteptăm 10 secunde să fim siguri că robotul e în lume
+        actions=[
+            Node(
+                package="controller_manager",
+                executable="spawner",
+                arguments=["diff_drive_controller"],
+            )
+        ]
+    )
+
+    joint_broad_spawner = TimerAction(
+        period=10.0, # Același delay
+        actions=[
+            Node(
+                package="controller_manager",
+                executable="spawner",
+                arguments=["joint_state_broadcaster"],
+            )
+        ]
+    )
     
     return LaunchDescription([
         gz_sim,
@@ -128,4 +170,7 @@ def generate_launch_description():
         bridge_node,
         rviz_node,
         pose_estimator_node,
+        person_follower_node,
+        diff_drive_spawner,
+        joint_broad_spawner
     ])

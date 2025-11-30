@@ -24,6 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             'pose_estimator_node = cbrn_perception.pose_estimator_node:main',
+            'person_follower = cbrn_perception.person_follower:main',
         ],
     },
 )

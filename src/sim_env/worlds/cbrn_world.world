@@ -62,7 +62,6 @@
     <include>
       <uri>model://person_standing</uri>
       <pose>2 2 0.5 -1.5708 0 0</pose> 
-      <static>true</static>
     </include>
     <!-- <include>
       <uri>model://cbrn_robot</uri>
