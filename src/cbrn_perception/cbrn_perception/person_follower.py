@@ -7,6 +7,9 @@ from cv_bridge import CvBridge
 import cv2
 import mediapipe as mp
 import numpy as np
+import csv
+import time
+import os
 
 mp_pose = mp.solutions.pose
 
@@ -95,30 +98,33 @@ class PersonFollower(Node):
 
 
     def follow_logic(self, cx, width, depth):
-
-        x_error = cx - width/2
-
-        # Proportional turning
-        Kp_turn = 0.0025
-        turn = -Kp_turn * x_error
-
-        # Forward control based on depth
-        desired_distance = 1.0  # meters from human
-        Kp_forward = 0.3
-
-        forward_speed = Kp_forward * (depth - desired_distance)
-
-        # Clamp speeds
-        forward_speed = max(min(forward_speed, 0.4), -0.1)
-        turn = max(min(turn, 1.0), -1.0)
-
-        # If too close → stop
-        if depth < 0.8:
-            forward_speed = 0.0
-
+        
         cmd = TwistStamped()
-        cmd.twist.linear.x = forward_speed
-        cmd.twist.angular.z = turn
+        cmd.twist.linear.x = 0.0
+        cmd.twist.angular.z = 0.0
+        # x_error = cx - width/2
+
+        # # Proportional turning
+        # Kp_turn = 0.0025
+        # turn = -Kp_turn * x_error
+
+        # # Forward control based on depth
+        # desired_distance = 1.0  # meters from human
+        # Kp_forward = 0.3
+
+        # forward_speed = Kp_forward * (depth - desired_distance)
+
+        # # Clamp speeds
+        # forward_speed = max(min(forward_speed, 0.4), -0.1)
+        # turn = max(min(turn, 1.0), -1.0)
+
+        # # If too close → stop
+        # if depth < 0.8:
+        #     forward_speed = 0.0
+
+        # cmd = TwistStamped()
+        # cmd.twist.linear.x = forward_speed
+        # cmd.twist.angular.z = turn
         self.cmd_pub.publish(cmd)
 
 
