@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import TwistStamped
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
@@ -25,7 +25,7 @@ class PersonFollower(Node):
         
 
         # Publish commands to robot
-        self.cmd_pub = self.create_publisher(Twist, "/diff_drive_controller/cmd_vel", 10)
+        self.cmd_pub = self.create_publisher(TwistStamped, "/diff_drive_controller/cmd_vel", 10)
 
         # MediaPipe Pose
         self.pose = mp.solutions.pose.Pose(
@@ -103,18 +103,18 @@ class PersonFollower(Node):
         if depth < 0.8:
             forward_speed = 0.0
 
-        cmd = Twist()
-        cmd.linear.x = forward_speed
-        cmd.angular.z = turn
+        cmd = TwistStamped()
+        cmd.twist.linear.x = forward_speed
+        cmd.twist.angular.z = turn
         self.cmd_pub.publish(cmd)
 
 
     def stop_and_search(self):
         # Log to see if it enters this function
         self.get_logger().info("SEARCHING - NO HUMAN DETECTED")  
-        cmd = Twist()
-        cmd.angular.z = 1.0
-        cmd.angular.x = 0.0
+        cmd = TwistStamped()
+        cmd.twist.angular.z = 1.0
+        cmd.twist.angular.x = 0.0
         self.cmd_pub.publish(cmd)
 
 
