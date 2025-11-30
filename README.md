@@ -50,9 +50,9 @@ cd ~/cbrn_ws/src/scripts
 ./compile_act_run
 ```
 
-Interfata Gazebo Sim 8 + Rviz2 pentru vizualizarea lumii (`cbrn_world`) in Gazebo și perspectiva camerei in (`Rviz2`):
+Interfata Gazebo Sim 8 + Modul AI:
 
-<img width="1920" height="875" alt="gazebo_rviz" src="https://github.com/user-attachments/assets/465f3837-a714-42bc-a3f4-38670ed6a12c" />
+<img width="1595" height="674" alt="interface" src="https://github.com/user-attachments/assets/85b29d41-b44e-41dd-af31-9615fa865b84" />
 
 # Modele AI pentru estimarea pozitiei:
 ## Pentru rulare:
