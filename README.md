@@ -54,3 +54,26 @@ Interfata Gazebo Sim 8 + Rviz2 pentru vizualizarea lumii (`cbrn_world`) in Gazeb
 
 <img width="1920" height="875" alt="gazebo_rviz" src="https://github.com/user-attachments/assets/465f3837-a714-42bc-a3f4-38670ed6a12c" />
 
+# Modele AI pentru estimarea pozitiei:
+## Pentru rulare:
+### Pas1: Lansarea Simulării (Terminal 1)
+Acest pas curăță fișierele vechi, recompilează spațiul de lucru și lansează mediul Gazebo, modelul robotului și interfața de vizualizare RViz.
+```
+cd ~/cbrn_ws/src/scripts
+./compile_act_run.bash
+```
+**Notă**: Așteptați ca Gazebo și RViz să se încarce complet și ca robotul să apară în mediu înainte de a trece la pasul următor.
+
+### Pas2: Pornirea Controlerului (Terminal 2)
+Acest nod acționează ca "creierul" de navigație. El primește coordonatele țintei de la nodul de percepție, comandă motoarele robotului și salvează datele experimentale în fișiere Excel (CSV).
+
+Trebuie să specificați parametrul model_name pentru a eticheta corect fișierul de log generat.
+```
+ros2 run cbrn_perception robot_controller --ros-args -p model_name:=[nume_model]
+```
+### Pas3: Activarea Modelului AI (Terminal 3)
+Acest pas pornește "ochii" robotului. Rulați scriptul specific modelului pe care doriți să îl evaluați în sesiunea curentă.
+```
+ros2 run cbrn_perception [nume_nod_detector]
+```
+
