@@ -8,6 +8,8 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
+mp_pose = mp.solutions.pose
+
 class PersonFollower(Node):
 
     def __init__(self):
@@ -25,10 +27,13 @@ class PersonFollower(Node):
         
 
         # Publish commands to robot
-        self.cmd_pub = self.create_publisher(TwistStamped, "/diff_drive_controller/cmd_vel", 10)
+        self.cmd_pub = self.create_publisher(
+            TwistStamped, 
+            "/diff_drive_controller/cmd_vel", 10
+        )
 
         # MediaPipe Pose
-        self.pose = mp.solutions.pose.Pose(
+        self.pose = mp_pose.Pose(
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
         )
@@ -40,7 +45,10 @@ class PersonFollower(Node):
 
     def depth_callback(self, msg):
         try:
-            self.depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+            self.depth_image = self.bridge.imgmsg_to_cv2(
+                msg, 
+                desired_encoding="passthrough"
+            )
         except Exception as e:
             self.get_logger().error(f"Depth conversion error: {e}")
 
@@ -64,12 +72,17 @@ class PersonFollower(Node):
         cx = int(np.mean(xs) * w)
         cy = int(np.mean(ys) * h)
 
+        # Draw a red circle on the detected centre
+        cv2.circle(frame, (cx, cy), 10, (0, 0, 255), -1)
 
         if self.depth_image is None:
             self.stop_and_search()
             return
 
-        depth_val = float(self.depth_image[cy, cx])
+        try:
+            depth_val = float(self.depth_image[cy, cx])
+        except IndexError:
+            depth_val = 5.0
 
         if depth_val <= 0 or np.isnan(depth_val):
             depth_val = 5.0  # assume far away
