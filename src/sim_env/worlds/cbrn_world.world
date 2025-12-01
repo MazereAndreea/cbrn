@@ -60,8 +60,14 @@
     </model>
 
     <include>
+      <name>person1</name>
       <uri>model://person_standing</uri>
       <pose>2 2 0.5 0 0 0</pose> 
+    </include>
+    <include>
+      <name>person2</name>
+      <uri>model://person_standing</uri>
+      <pose>2 0 0.3 0 0 -1.57</pose> 
     </include>
     <!-- <include>
       <uri>model://cbrn_robot</uri>

@@ -23,8 +23,11 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'pose_estimator_node = cbrn_perception.pose_estimator_node:main',
-            'person_follower = cbrn_perception.person_follower:main',
+            'robot_controller = cbrn_perception.robot_controller:main',
+            'mediapipe_detector = cbrn_perception.mediapipe_detector:main',
+            'yolo_detector = cbrn_perception.yolo_detector:main',
+            'movenet_detector = cbrn_perception.movenet_detector:main',
+            'ResNet50_detector = cbrn_perception.ResNet50_detector:main',
         ],
     },
 )

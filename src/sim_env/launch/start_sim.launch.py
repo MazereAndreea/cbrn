@@ -120,31 +120,6 @@ def generate_launch_description():
         ]
     )
 
-    pose_estimator_node = Node(
-        package='cbrn_perception',        
-        executable='pose_estimator_node', 
-        name='pose_estimator_node',
-        parameters=[{'use_sim_time': True}],
-        output='screen'
-    )
-
-    # controller_params_file = os.path.join(pkg_dir,'config','my_controllers.yaml')
-
-    # controller_manager = Node(
-    #     package="controller_manager",
-    #     executable="ros2_control_node",
-    #     parameters=[{'robot_description': robot_description_xml},
-    #                 controller_params_file]
-    # )
-
-    person_follower_node = Node(
-        package='cbrn_perception',
-        executable='person_follower',
-        name='person_follower',
-        parameters=[{'use_sim_time': True}],
-        output='screen'
-    )
-
     diff_drive_spawner = TimerAction(
         period=10.0, # Așteptăm 10 secunde să fim siguri că robotul e în lume
         actions=[
@@ -174,8 +149,6 @@ def generate_launch_description():
         # image_bridge,
         bridge_node,
         rviz_node,
-        pose_estimator_node,
-        person_follower_node,
         diff_drive_spawner,
         joint_broad_spawner
     ])

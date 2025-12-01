@@ -1,10 +1,11 @@
 #!/bin/bash
 
-pkill -f gz
-pkill -f gzserver
-pkill -f gzclient
+pkill -9 -f ros
+pkill -9 -f rclpy
+pkill -9 -f gazebo
+pkill -9 -f mediapipe
+pkill -9 -f python3
 
-pkill -f ros2
 # 1. Mergi la rădăcina workspace-ului
 cd ~/cbrn_ws
 
@@ -18,7 +19,7 @@ export GZ_SIM_RESOURCE_PATH=$GZ_SIM_RESOURCE_PATH:~/cbrn_ws/install/sim_env/shar
 rm -rf build install log
 
 # 3. COMPILEAZĂ (pentru a copia .sdf-ul modificat)
-colcon build
+colcon build 
 
 # 4. ACTIVEAZĂ noul build
 source install/setup.bash

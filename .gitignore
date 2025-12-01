@@ -13,3 +13,9 @@ src/cbrn_perception/cbrn_perception/__init__.py
 /src/sim_env/models/person_standing/meshes
 /src/sim_env/models/pdf
 *.zip
+*.csv
+/csv
+*.tflite
+/tflite_env
+*.pt
+/tflite_env
