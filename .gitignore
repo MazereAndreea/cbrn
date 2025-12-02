@@ -4,7 +4,6 @@
 *.env
 *:*Zone.Identifier$
 *.Identifier
-*.png
 /src/cbrn_perception/test
 *.pyc
 src/cbrn_perception/cbrn_perception/__init__.py
@@ -17,3 +16,4 @@ src/cbrn_perception/cbrn_perception/__init__.py
 *.pt
 /tflite_env
 *.pth
+src/sim_env/rviz/YOLO View_screenshot_30.11.2025.png
