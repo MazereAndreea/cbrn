@@ -22,6 +22,7 @@ Acest proiect a fost configurat și testat folosind următorul mediu. Toate prob
 * **Sistem de Operare:** Ubuntu 24.04 (rulat prin WSL)
 * **Distribuție ROS 2:** ROS 2 Jazzy (folosind instalarea binară din `/opt/ros/jazzy/`)
 * **Simulator:** Ignition Gazebo (pachetul `ros-jazzy-ros-gz-sim`)
+* **Python 3.12**
 
 ### Dependințe Cheie
 
