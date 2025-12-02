@@ -55,6 +55,7 @@ Interfata Gazebo Sim 8 + Modul AI:
 <img width="1595" height="674" alt="interface" src="https://github.com/user-attachments/assets/85b29d41-b44e-41dd-af31-9615fa865b84" />
 
 # Modele AI pentru estimarea pozitiei:
+Pentru partea de testare voi folosi modelele: MoveNet, ResNet50, Yolo11_pose, MediaPipePose Landmarker
 ## Pentru rulare:
 ### Pas1: Lansarea Simulării (Terminal 1)
 Acest pas curăță fișierele vechi, recompilează spațiul de lucru și lansează mediul Gazebo, modelul robotului și interfața de vizualizare RViz.
@@ -77,3 +78,20 @@ Acest pas pornește "ochii" robotului. Rulați scriptul specific modelului pe ca
 ros2 run cbrn_perception [nume_nod_detector]
 ```
 
+## Media Pipe Pose Landmarker
+
+CONFIDENCE_SCORE = 0.2
+
+<img width="800" height="600" alt="MediaPipe_0 2" src="https://github.com/user-attachments/assets/e72459ac-4c6f-4782-b505-5ce7b8bf5682" />
+
+## YOLO11 Pose
+
+CONFIDENCE_SCORE = 0.15
+
+<img width="800" height="600" alt="YOLO_0 15conf" src="https://github.com/user-attachments/assets/b1338fea-6131-4bff-b0c1-e9d61b1cd7ca" />
+
+## MoveNet
+
+CONFIDENCE_SCORE = 0.1
+
+<img width="800" height="600" alt="movenet_conf0 1" src="https://github.com/user-attachments/assets/4921db3c-8689-416e-b46b-d5cb0b580f72" />
