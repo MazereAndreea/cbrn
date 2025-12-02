@@ -2,7 +2,6 @@
 *install
 *log
 *.env
-*.config
 *:*Zone.Identifier$
 *.Identifier
 *.png
@@ -18,4 +17,3 @@ src/cbrn_perception/cbrn_perception/__init__.py
 *.pt
 /tflite_env
 *.pth
-!src/cbrn_perception/person_standing/**
