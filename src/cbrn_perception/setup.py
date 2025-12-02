@@ -28,6 +28,7 @@ setup(
             'yolo_detector = cbrn_perception.yolo_detector:main',
             'movenet_detector = cbrn_perception.movenet_detector:main',
             'ResNet50_detector = cbrn_perception.ResNet50_detector:main',
+            'vitpose_detector = cbrn_perception.vitpose_detector:main',
         ],
     },
 )

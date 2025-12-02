@@ -12,6 +12,8 @@ import time
 import os
 from datetime import datetime
 
+CONFIDENCE_SCORE = 0.15
+
 class YoloDetector(Node):
     def __init__(self):
         super().__init__("yolo_detector")
@@ -51,7 +53,7 @@ class YoloDetector(Node):
         
         # Inferenta Standard (Fără rotație)
         # Putem lăsa confidența mică (0.15) ca să prindă cât mai mult
-        results = self.model(frame, verbose=False, conf=0.15)
+        results = self.model(frame, verbose=False, conf=CONFIDENCE_SCORE)
         
         target_msg = Point()
         target_msg.z = 0.0 

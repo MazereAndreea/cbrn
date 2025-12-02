@@ -67,6 +67,8 @@
     <include>
       <name>person2</name>
       <uri>model://person_standing</uri>
+      <!-- x y z roll pitch yaw -->
+      <!-- fata stanga sus ... ... ...-->
       <pose>2 0 0.3 0 0 -1.57</pose> 
     </include>
     <!-- <include>

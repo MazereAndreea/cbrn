@@ -13,6 +13,8 @@ from datetime import datetime
 import tensorflow as tf
 tflite = tf.lite
 
+CONFIDENCE_SCORE = 0.1
+
 class MoveNetDetector(Node):
     def __init__(self):
         super().__init__("movenet_detector")
@@ -52,7 +54,7 @@ class MoveNetDetector(Node):
         self.writer.writerow(header)
         
         self.get_logger().info("MoveNet Detector Pornit!")
-        print("INPUT DETAILS:", self.input_details)
+        # print("INPUT DETAILS:", self.input_details)
 
 
     def depth_cb(self, msg):
@@ -60,7 +62,7 @@ class MoveNetDetector(Node):
 
     def img_cb(self, msg):
         try:
-            frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            frame = self.bridge.imgmsg_to_cv2(msg, "bgr8").copy()
         except: return
 
         h, w, _ = frame.shape
@@ -69,8 +71,9 @@ class MoveNetDetector(Node):
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         img_resized = cv2.resize(img, (self.input_size, self.input_size))
 
-        input_data = img_resized.astype(np.float32) / 255.0
-        input_data = np.expand_dims(input_data, axis=0)
+        # KEEP VALUES BETWEEN [0,255]
+        # input_data = img_resized.astype(np.float32) / 255.0
+        input_data = np.expand_dims(img_resized, axis=0).astype(np.float32)
 
         # --- INFERENȚĂ ---
         self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
@@ -93,10 +96,11 @@ class MoveNetDetector(Node):
         target_msg.z = 0.0
         
         # Calculăm centrul pe baza umerilor (5, 6) sau șoldurilor (11, 12)
-        # Dacă scorul e bun (> 0.2)
+        # Dacă scorul e bun (> CONFIDENCE_SCORE)
         valid_points = []
         for kp in keypoints:
-            if kp[2] > 0.2: # Threshold
+            print("AM AJUNS AICI")
+            if kp[2] > CONFIDENCE_SCORE: # Threshold
                 # Convertim din 0-1 în pixeli reali
                 py = int(kp[0] * h)
                 px = int(kp[1] * w)
