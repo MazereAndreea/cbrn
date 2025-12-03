@@ -3,7 +3,6 @@
 pkill -9 -f ros
 pkill -9 -f rclpy
 pkill -9 -f gazebo
-pkill -9 -f mediapipe
 pkill -9 -f python3
 
 # 1. Mergi la rădăcina workspace-ului
