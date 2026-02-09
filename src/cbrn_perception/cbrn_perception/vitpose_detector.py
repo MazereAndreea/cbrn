@@ -10,6 +10,24 @@ import csv
 import time
 import os
 from datetime import datetime
+from mmengine.registry import MODELS
+import mmpretrain.models
+
+# --- FIX MANUAL PENTRU REGISTRY (BRIDGE) ---
+try:
+    import mmpretrain.models
+    from mmpose.registry import MODELS as MMPOSE_MODELS
+    from mmpretrain.registry import MODELS as PRETRAIN_MODELS
+    
+    # Înregistrăm manual VisionTransformer în registrul mmpose
+    if 'VisionTransformer' in PRETRAIN_MODELS.module_dict:
+        vt_module = PRETRAIN_MODELS.get('VisionTransformer')
+        # Îl înregistrăm cu ambele nume posibile pentru siguranță
+        MMPOSE_MODELS.register_module(name='VisionTransformer', module=vt_module, force=True)
+        MMPOSE_MODELS.register_module(name='mmpretrain.VisionTransformer', module=vt_module, force=True)
+        print("[INFO] VisionTransformer a fost mapat manual în mmpose.")
+except Exception as e:
+    print(f"[WARN] Eroare la maparea registrelor: {e}")
 
 # --- IMPORTURI SPECIFICE MMPOSE ---
 try:
@@ -35,8 +53,8 @@ class ViTPoseDetector(Node):
             # Sau 'vitpose-h' (Huge) pentru precizie maximă dar lent
             self.inferencer = MMPoseInferencer(
                 pose2d='vitpose-b', 
-                det_model='yolox_l', 
-                device='cuda' # Schimbă în 'cpu' dacă nu ai NVIDIA
+                det_model='yolox_tiny', 
+                device='cpu' # Schimbă în 'cpu' dacă nu ai NVIDIA
             )
         except Exception as e:
             self.get_logger().error(f"Eroare la încărcarea modelului: {e}")

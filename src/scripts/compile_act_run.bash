@@ -17,6 +17,7 @@ export GZ_SIM_RESOURCE_PATH=$GZ_SIM_RESOURCE_PATH:~/cbrn_ws/install/sim_env/shar
 # 2. ȘTERGE build-ul și instalarea veche
 rm -rf build install log
 
+source ~/venvs/python_3.12/bin/activate
 # 3. COMPILEAZĂ (pentru a copia .sdf-ul modificat)
 colcon build 
 

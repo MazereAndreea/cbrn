@@ -18,7 +18,6 @@ class PyTorchDetector(Node):
         super().__init__("pytorch_detector")
         self.bridge = CvBridge()
         
-        self.get_logger().info("Incarc modelul PyTorch (Keypoint R-CNN)... Asteaptati...")
         # Folosim CPU (sau cuda daca ai)
         self.device = torch.device('cpu') 
         # Încărcăm modelul pre-antrenat
