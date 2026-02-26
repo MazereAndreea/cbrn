@@ -52,9 +52,8 @@ class ViTPoseDetector(Node):
             # Folosim 'vitpose-b' (Base) pentru un balans bun viteză/precizie
             # Sau 'vitpose-h' (Huge) pentru precizie maximă dar lent
             self.inferencer = MMPoseInferencer(
-                pose2d='vitpose-b', 
-                det_model='yolox_tiny', 
-                device='cpu' # Schimbă în 'cpu' dacă nu ai NVIDIA
+                pose2d='vitpose-b',  
+                device='cpu'
             )
         except Exception as e:
             self.get_logger().error(f"Eroare la încărcarea modelului: {e}")
@@ -109,51 +108,72 @@ class ViTPoseDetector(Node):
         target_msg = Point()
         target_msg.z = 0.0
 
-        if predictions:
-            # Luăm prima persoană detectată
-            person = predictions[0]
+        if len(predictions) > 0:
+            persons = predictions[0]
+    
+            for person in persons:
+                keypoints = np.array(person['keypoints']) 
+                scores = np.array(person['keypoint_scores']) 
+                bbox = person['bbox'][0] # [x1, y1, x2, y2]
             
-            # Extragem datele
-            keypoints = np.array(person['keypoints']) # shape (17, 2)
-            scores = np.array(person['keypoint_scores']) # shape (17,)
-            bbox = person['bbox'][0] # [x1, y1, x2, y2]
-            
-            # --- 1. EXPORT CSV ---
-            row = [time.time()]
-            for i in range(17):
-                # Normalizăm coordonatele pentru CSV (0-1) cum făcea YOLO, pentru consistență
-                norm_x = keypoints[i][0] / w
-                norm_y = keypoints[i][1] / h
-                row.extend([norm_x, norm_y, scores[i]])
-            self.writer.writerow(row)
+                # --- 1. EXPORT CSV ---
+                row = [time.time()]
+                for i in range(17):
+                    # Normalizăm coordonatele pentru CSV (0-1) cum făcea YOLO, pentru consistență
+                    norm_x = keypoints[i][0] / w
+                    norm_y = keypoints[i][1] / h
+                    row.extend([norm_x, norm_y, scores[i]])
+                self.writer.writerow(row)
 
-            # --- 2. VIZUALIZARE ---
-            # Desenăm puncte
-            for i, (kp, score) in enumerate(zip(keypoints, scores)):
-                if score > CONFIDENCE_THRESHOLD:
-                    cx_kp, cy_kp = int(kp[0]), int(kp[1])
-                    cv2.circle(frame, (cx_kp, cy_kp), 5, (0, 255, 0), -1)
+                # --- 2. VIZUALIZARE ---
+                # Desenăm puncte
+                for i, (kp, score) in enumerate(zip(keypoints, scores)):
+                    if score > CONFIDENCE_THRESHOLD:
+                        cx_kp, cy_kp = int(kp[0]), int(kp[1])
+                        cv2.circle(frame, (cx_kp, cy_kp), 5, (0, 255, 0), -1)
 
-            # Desenăm Bounding Box
-            x1, y1, x2, y2 = map(int, bbox)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-            
-            # --- 3. CALCUL DISTANȚĂ ȘI TARGET ---
-            cx = int((x1 + x2) / 2)
-            cy = int((y1 + y2) / 2)
-            
-            dist = 5.0
-            if self.depth_image is not None:
-                try:
-                    cy_safe = min(max(cy, 0), h-1)
-                    cx_safe = min(max(cx, 0), w-1)
-                    dist = float(self.depth_image[cy_safe, cx_safe])
-                    if np.isnan(dist) or dist <= 0: dist = 5.0
-                except: pass
+                # Desenez articulatii
+                SKELETON = [
+                    (5, 7), (7, 9),        # left arm
+                    (6, 8), (8, 10),       # right arm
+                    (5, 6),                # shoulders
+                    (5, 11), (6, 12),      # torso upper
+                    (11, 12),              # hips
+                    (11, 13), (13, 15),    # left leg
+                    (12, 14), (14, 16),    # right leg
+                    (0, 1), (0, 2),        # face
+                    (1, 3), (2, 4)
+                ]
 
-            target_msg.x = float((cx / w) - 0.5)
-            target_msg.y = float(cy)
-            target_msg.z = float(dist)
+                for joint in SKELETON:
+                    p1, p2 = joint
+
+                    if scores[p1] > CONFIDENCE_THRESHOLD and scores[p2] > CONFIDENCE_THRESHOLD:
+                        x1, y1 = int(keypoints[p1][0]), int(keypoints[p1][1])
+                        x2, y2 = int(keypoints[p2][0]), int(keypoints[p2][1])
+
+                        cv2.line(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
+                        
+                # Desenăm Bounding Box
+                x1, y1, x2, y2 = map(int, bbox)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                
+                # --- 3. CALCUL DISTANȚĂ ȘI TARGET ---
+                cx = int((x1 + x2) / 2)
+                cy = int((y1 + y2) / 2)
+                
+                dist = 5.0
+                if self.depth_image is not None:
+                    try:
+                        cy_safe = min(max(cy, 0), h-1)
+                        cx_safe = min(max(cx, 0), w-1)
+                        dist = float(self.depth_image[cy_safe, cx_safe])
+                        if np.isnan(dist) or dist <= 0: dist = 5.0
+                    except: pass
+
+                target_msg.x = float((cx / w) - 0.5)
+                target_msg.y = float(cy)
+                target_msg.z = float(dist)
         
         self.target_pub.publish(target_msg)
 
