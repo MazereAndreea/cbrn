@@ -24,5 +24,7 @@ colcon build
 # 4. ACTIVEAZĂ noul build
 source install/setup.bash
 
+export $PYTHONPATH=$PYTHONPATH:/home/ai/venvs/python_3.12/lib/python3.12/site-packages
+
 # 5. RULEAZĂ
 ros2 launch sim_env start_sim.launch.py
