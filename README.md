@@ -96,3 +96,9 @@ CONFIDENCE_SCORE = 0.15
 CONFIDENCE_SCORE = 0.1
 
 <img width="800" height="600" alt="movenet_conf0 1" src="https://github.com/user-attachments/assets/4921db3c-8689-416e-b46b-d5cb0b580f72" />
+
+## VitPose base 
+
+CONFIDENCE_SCORE = 0.3
+
+<img width="807" height="685" alt="image" src="https://github.com/user-attachments/assets/e409508a-bd88-49ea-82ec-2934a9758d52" />
