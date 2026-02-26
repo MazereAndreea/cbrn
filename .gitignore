@@ -17,3 +17,4 @@ src/cbrn_perception/cbrn_perception/__init__.py
 /tflite_env
 *.pth
 src/sim_env/rviz/YOLO View_screenshot_30.11.2025.png
+

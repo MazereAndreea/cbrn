@@ -19,7 +19,7 @@ class PyTorchDetector(Node):
         self.bridge = CvBridge()
         
         # Folosim CPU (sau cuda daca ai)
-        self.device = torch.device('cpu') 
+        self.device = torch.device('cuda') 
         # Încărcăm modelul pre-antrenat
         self.model = keypointrcnn_resnet50_fpn(pretrained=True)
         self.model.eval().to(self.device)

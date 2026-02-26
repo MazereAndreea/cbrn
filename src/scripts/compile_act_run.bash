@@ -6,7 +6,7 @@ pkill -9 -f gazebo
 pkill -9 -f python3
 
 # 1. Mergi la rădăcina workspace-ului
-cd ~/cbrn_ws
+cd ~/cbrn/cbrn
 
 source /opt/ros/jazzy/setup.bash
 # calea către bibliotecile ROS Jazzy pentru Gazebo
@@ -19,7 +19,7 @@ rm -rf build install log
 
 source ~/venvs/python_3.12/bin/activate
 # 3. COMPILEAZĂ (pentru a copia .sdf-ul modificat)
-colcon build 
+colcon build --symlink-install --cmake-args -DPYTHON_EXECUTABLE=$(which python3)
 
 # 4. ACTIVEAZĂ noul build
 source install/setup.bash

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -8,11 +7,6 @@ import cv2
 import numpy as np
 import csv
 import time
-import os
-from datetime import datetime
-from mmengine.registry import MODELS
-import mmpretrain.models
-
 # --- FIX MANUAL PENTRU REGISTRY (BRIDGE) ---
 try:
     import mmpretrain.models
@@ -29,12 +23,36 @@ try:
 except Exception as e:
     print(f"[WARN] Eroare la maparea registrelor: {e}")
 
+venv_path = '/home/ai/venvs/python_3.12/lib/python3.12/site-packages'
 # --- IMPORTURI SPECIFICE MMPOSE ---
 try:
     from mmpose.apis import MMPoseInferencer
-except ImportError:
+except ImportError as e:
+    print(f"❌ [EROARE REALĂ]: {e}")
     print("❌ EROARE: MMPose nu este instalat. Rulează: mim install mmpose")
     exit()
+
+try:
+    import mmengine
+    import mmpretrain
+    from mmengine.registry import MODELS
+    from mmpose.registry import MODELS as MMPOSE_MODELS
+    from mmpretrain.registry import MODELS as PRETRAIN_MODELS
+    from mmpose.apis import MMPoseInferencer
+    
+    # Mapare manuală VisionTransformer
+    if 'VisionTransformer' in PRETRAIN_MODELS.module_dict:
+        vt_module = PRETRAIN_MODELS.get('VisionTransformer')
+        MMPOSE_MODELS.register_module(name='VisionTransformer', module=vt_module, force=True)
+        MMPOSE_MODELS.register_module(name='mmpretrain.VisionTransformer', module=vt_module, force=True)
+        print("✅ [INFO] Modelele OpenMMLab au fost încărcate și mapate.")
+except ImportError as e:
+    print(f"❌ [EROARE CRITICĂ] Importul a eșuat: {e}")
+    print("Sfat: Verifică dacă 'mmcv' sau 'mmengine' sunt instalate corect în venv.")
+    sys.exit(1)
+except Exception as e:
+    print(f"❌ [EROARE SISTEM] Problemă la inițializare: {e}")
+    sys.exit(1)
 
 CONFIDENCE_THRESHOLD = 0.3
 
@@ -52,9 +70,9 @@ class ViTPoseDetector(Node):
             # Folosim 'vitpose-b' (Base) pentru un balans bun viteză/precizie
             # Sau 'vitpose-h' (Huge) pentru precizie maximă dar lent
             self.inferencer = MMPoseInferencer(
-                pose2d='vitpose-b', 
-                det_model='yolox_tiny', 
-                device='cpu' # Schimbă în 'cpu' dacă nu ai NVIDIA
+                pose2d='src/cbrn_perception/cbrn_perception/yolox_l_8xb8-300e_humanart.py', 
+                pose2d_weights='/home/ai/cbrn/cbrn/src/cbrn_perception/configs/yolox/yolox_tiny.pth',
+                device='cuda' 
             )
         except Exception as e:
             self.get_logger().error(f"Eroare la încărcarea modelului: {e}")
