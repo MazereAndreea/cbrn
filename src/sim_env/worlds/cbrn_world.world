@@ -62,15 +62,17 @@
     <include>
       <name>person1</name>
       <uri>model://person_standing</uri>
-      <pose>2 2 0.5 0 0 0</pose> 
+      <!-- <static>true</static> -->
+      <pose>1.85 0 0.17 -1.57 0 -1.57</pose> 
     </include>
     <include>
       <name>person2</name>
       <uri>model://person_standing</uri>
       <!-- x y z roll pitch yaw -->
       <!-- fata stanga sus ... ... ...-->
-      <pose>2 0 0.3 0 0 -1.57</pose> 
-    </include>
+      <pose>1.6 1 0.17 -1.57 0 -1.51</pose>
+      <!-- <static>true</static>  -->
+    </include> 
     <!-- <include>
       <uri>model://cbrn_robot</uri>
       <pose>0 0 0.5 0 0 0</pose>

@@ -6,7 +6,7 @@ pkill -9 -f gazebo
 pkill -9 -f python3
 
 # 1. Mergi la rădăcina workspace-ului
-cd ~/cbrn_ws
+cd ~/cbrn/cbrn
 
 source /opt/ros/jazzy/setup.bash
 # calea către bibliotecile ROS Jazzy pentru Gazebo

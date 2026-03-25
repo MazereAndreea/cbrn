@@ -37,7 +37,7 @@ class UniversalPoseDetector(Node):
         
         # DECLARE PARAMETERS 
         self.declare_parameter("model_config", "human") 
-        self.declare_parameter("device", "cpu")                   
+        self.declare_parameter("device", "cuda")                   
         self.declare_parameter("csv_output", True)
 
         self.add_on_set_parameters_callback(self.parameter_callback)

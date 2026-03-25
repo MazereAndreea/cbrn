@@ -19,7 +19,8 @@
       <visual name='base_visual'>
         <geometry>
           <box>
-            <size>0.5 0.3 0.1</size>
+          <!-- X (length), Y (width), 0.1 (height) -->
+            <size>0.5 0.3 0.8</size>
           </box>
         </geometry>
       </visual>

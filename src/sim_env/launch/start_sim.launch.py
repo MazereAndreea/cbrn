@@ -73,7 +73,6 @@ def generate_launch_description():
         )]
     )
 
-
     # image_bridge = Node(
     #     package='ros_gz_bridge',
     #     executable='parameter_bridge',

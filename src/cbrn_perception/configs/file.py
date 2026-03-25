@@ -5,19 +5,15 @@ from mmpose.apis import MMPoseInferencer
 # Fetch the master list of all models
 all_models = MMPoseInferencer.list_models('mmpose')
 
-# Filter for 2D Wholebody models (for pose2d parameter)
-wholebody_2d = [m for m in all_models if 'wholebody' in m and '3d' not in m]
-
 # 3. Filter for 3D Wholebody models (for pose3d parameter)
-wholebody_3d = [m for m in all_models if 'wholebody' in m and '3d' in m]
+wholebody_coco = [m for m in all_models if 'coco' in m]
 
-print("--- 2D Wholebody Models (use in pose2d) ---")
-for model in wholebody_2d:
-    print(model)
 
-print("\n--- 3D Wholebody Models (use in pose3d) ---")
-for model in wholebody_3d:
+print("\n-------- COCO DATASET ------")
+for model in wholebody_coco:
     print(model)
+    with open("coco_models.txt", "a") as f:
+        f.write(model + "\n")
 
 # Model filename structure (OpenMMLab / MMPose convention):
 # td-hm_hrnet-w48_8xb64-20e_posetrack18-384x288
