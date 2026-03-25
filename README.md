@@ -79,6 +79,12 @@ Acest pas pornește "ochii" robotului. Rulați scriptul specific modelului pe ca
 ros2 run cbrn_perception [nume_nod_detector]
 ```
 
+### Pas3: Schimbare parametru ROS pentru testare modele MMPose
+
+```
+ros2 param set /universal_pose_detector model_config [nume_model]
+```
+
 ## Media Pipe Pose Landmarker
 
 CONFIDENCE_SCORE = 0.2
