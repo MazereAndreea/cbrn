@@ -5,7 +5,7 @@
 
     <!-- baza robotului -->
     <link name='base_link'>
-      <pose>0 0 0 0 0 0</pose>
+      <pose>0 0 0.75 0 0 0</pose>
 
       <inertial>
         <mass>5.0</mass>
@@ -20,7 +20,7 @@
         <geometry>
           <box>
           <!-- X (length), Y (width), 0.1 (height) -->
-            <size>0.5 0.3 0.8</size>
+            <size>0.5 0.3 5</size>
           </box>
         </geometry>
       </visual>
@@ -28,7 +28,7 @@
       <collision name='base_collision'>
         <geometry>
           <box>
-            <size>0.5 0.3 0.1</size>
+            <size>0.5 0.3 1.5</size>
           </box>
         </geometry>
       </collision>
