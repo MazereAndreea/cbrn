@@ -4,6 +4,8 @@ pkill -9 -f ros
 pkill -9 -f rclpy
 pkill -9 -f gazebo
 pkill -9 -f python3
+pkill -f gz
+pkill -f "gz sim"
 
 # 1. Mergi la rădăcina workspace-ului
 cd ~/cbrn/cbrn

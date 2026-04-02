@@ -28,10 +28,9 @@ except ImportError:
     print("❌ EROARE: MMPose nu este instalat.")
     exit()
 
-
-
 class UniversalPoseDetector(Node):
     def __init__(self):
+        self.image_saved = False
         super().__init__("universal_pose_detector")
         self.bridge = CvBridge()
         
@@ -109,43 +108,52 @@ class UniversalPoseDetector(Node):
 
         if predictions and len(predictions[0]) > 0:
             # Handle list of lists structure often returned by MMPose
-            person = predictions[0][0] if isinstance(predictions[0], list) else predictions[0]
-            keypoints = np.array(person['keypoints'])
-            scores = np.array(person['keypoint_scores'])
+            persons = predictions[0] if isinstance(predictions[0], list) else predictions[0]
+            for person in persons:
+                keypoints = np.array(person['keypoints'])
+                scores = np.array(person['keypoint_scores'])
 
-            SKELETON = [
-                (5, 7), (7, 9),        # left arm
-                (6, 8), (8, 10),       # right arm
-                (5, 6),                # shoulders
-                (5, 11), (6, 12),      # torso upper
-                (11, 12),              # hips
-                (11, 13), (13, 15),    # left leg
-                (12, 14), (14, 16),    # right leg
-                (0, 1), (0, 2),        # face
-                (1, 3), (2, 4)
-            ]
+                SKELETON = [
+                    (5, 7), (7, 9),        # left arm
+                    (6, 8), (8, 10),       # right arm
+                    (5, 6),                # shoulders
+                    (5, 11), (6, 12),      # torso upper
+                    (11, 12),              # hips
+                    (11, 13), (13, 15),    # left leg
+                    (12, 14), (14, 16),    # right leg
+                    (0, 1), (0, 2),        # face
+                    (1, 3), (2, 4)
+                ]
 
-            for p1, p2 in SKELETON:
-                # Verificăm dacă indicii există în modelul curent (important pentru WholeBody)
-                if p1 < len(keypoints) and p2 < len(keypoints):
-                    if scores[p1] > 0.1 and scores[p2] > 0.1:
-                        pt1 = (int(keypoints[p1][0]), int(keypoints[p1][1]))
-                        pt2 = (int(keypoints[p2][0]), int(keypoints[p2][1]))
-                        cv2.line(frame, pt1, pt2, (255, 0, 0), 2) # Linie albastră, grosime 2
-            
-            # Draw results
-            for kp, score in zip(keypoints, scores):
-                if score > 0.1:
-                    cv2.circle(frame, (int(kp[0]), int(kp[1])), 5, (0, 255, 0), -1)
+                for p1, p2 in SKELETON:
+                    # Verificăm dacă indicii există în modelul curent (important pentru WholeBody)
+                    if p1 < len(keypoints) and p2 < len(keypoints):
+                        if scores[p1] > 0.1 and scores[p2] > 0.1:
+                            pt1 = (int(keypoints[p1][0]), int(keypoints[p1][1]))
+                            pt2 = (int(keypoints[p2][0]), int(keypoints[p2][1]))
+                            cv2.line(frame, pt1, pt2, (255, 0, 0), 2) # Linie albastră, grosime 2
+                
+                # Draw results
+                for kp, score in zip(keypoints, scores):
+                    if score > 0.1:
+                        cv2.circle(frame, (int(kp[0]), int(kp[1])), 5, (0, 255, 0), -1)
 
-            # Publish Target (Nose)
-            target_msg = Point()
-            target_msg.x = float((keypoints[0][0] / frame.shape[1]) - 0.5)
-            self.target_pub.publish(target_msg)
+                # Publish Target (Nose)
+                target_msg = Point()
+                target_msg.x = float((keypoints[0][0] / frame.shape[1]) - 0.5)
+                self.target_pub.publish(target_msg)
 
         # Output
         out_msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
         self.result_image_pub.publish(out_msg)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('s'):
+            save_dir = "/home/ai/cbrn/cbrn/src/models_images"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            model_cfg = self.get_parameter("model_config").value
+            filename = os.path.join(save_dir, f"{model_cfg}_{timestamp}.png")
+            cv2.imwrite(filename, frame)
+            self.image_saved = True
         cv2.imshow("MMPose Universal Monitor", frame)
         cv2.waitKey(1)
 
