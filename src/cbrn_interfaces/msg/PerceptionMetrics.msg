@@ -1,0 +1,6 @@
+std_msgs/Header header
+
+float64 inference_time
+float64 confidence_score
+bool is_detected
+float64 distance_estimate

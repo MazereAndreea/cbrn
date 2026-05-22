@@ -19,14 +19,14 @@ export GZ_SIM_RESOURCE_PATH=$GZ_SIM_RESOURCE_PATH:~/cbrn_ws/install/sim_env/shar
 # 2. ȘTERGE build-ul și instalarea veche
 rm -rf build install log
 
-source ~/venvs/python_3.12/bin/activate
+#source ~/venvs/python_3.12/bin/activate
 # 3. COMPILEAZĂ (pentru a copia .sdf-ul modificat)
 colcon build 
 
 # 4. ACTIVEAZĂ noul build
 source install/setup.bash
 
-export $PYTHONPATH=$PYTHONPATH:/home/ai/venvs/python_3.12/lib/python3.12/site-packages
+export $PYTHONPATH='$PYTHONPATH:/home/ai/venvs/python_3.12/lib/python3.12/site-packages'
 
 # 5. RULEAZĂ
 ros2 launch sim_env start_sim.launch.py
