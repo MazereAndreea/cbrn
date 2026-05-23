@@ -2,7 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from rcl_interfaces.msg import SetParametersResult
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import Point
 from cv_bridge import CvBridge
 import cv2
@@ -41,8 +41,11 @@ class UniversalPoseDetector(Node):
         self.declare_parameter("csv_output", True)
 
         self.add_on_set_parameters_callback(self.parameter_callback)
-
+        
         self.timer_callback()
+        self.focal_length = 800.0 # Valoare implicită, va fi actualizată de camera_info_cb
+        # 2. Ne abonăm la informațiile camerei din Gazebo pentru a lua distanța focală reală
+        self.camera_info_sub = self.create_subscription(CameraInfo, "/camera/camera_info", self.camera_info_cb, 10)
 
         self.image_sub = self.create_subscription(Image, "/camera", self.img_cb, 10)
         self.target_pub = self.create_publisher(Point, "/perception/target", 10)
@@ -51,6 +54,11 @@ class UniversalPoseDetector(Node):
         # Setup CSV 
         self.metrics_pub = self.create_publisher(PerceptionMetrics, "/pose_estimation/metrics", 10)    
         self.setup_csv()
+
+    def camera_info_cb(self, msg):
+        # Extragem distanța focală (fx) din matricea K a camerei din Gazebo
+        if msg.k[0] > 0:
+            self.focal_length = msg.k[0]
         
     def timer_callback(self):
         # Get parameter values
@@ -119,10 +127,12 @@ class UniversalPoseDetector(Node):
 
         # Pregătire mesaj Metrics
         metrics_msg = PerceptionMetrics()
+        metrics_msg.model_name = self.get_parameter("model_config").value
         metrics_msg.header = msg.header
         metrics_msg.inference_time = float(inference_time)
         metrics_msg.is_detected = False
         metrics_msg.confidence_score = 0.0
+        metrics_msg.distance_estimate = 0.0
 
         if predictions and len(predictions[0]) > 0:
 
@@ -134,6 +144,28 @@ class UniversalPoseDetector(Node):
                 scores = np.array(person['keypoint_scores'])
 
                 metrics_msg.confidence_score = float(np.mean(scores))
+
+                # --- MODIFICARE PINHOLE START ---
+                REAL_HEIGHT = 1.70 # Constanta fizică: Presupunem înălțimea persoanei de 1.70 metri
+                
+                # Extragem doar coordonatele Y ale punctelor care au fost detectate cu încredere > 0.1
+                valid_y_coords = [kp[1] for kp, score in zip(keypoints, scores) if score > 0.1]
+                
+                if len(valid_y_coords) > 2:
+                    # Înălțimea pe ecran (h) este diferența dintre cel mai de jos punct (max Y) și cel mai de sus (min Y)
+                    h_pixels = max(valid_y_coords) - min(valid_y_coords)
+                    
+                    # Evităm împărțirea la zero și cazurile aberante
+                    if h_pixels > 20: 
+                        # Aplicăm formula D = (f * H) / h
+                        calculated_distance = (self.focal_length * REAL_HEIGHT) / h_pixels
+                        metrics_msg.distance_estimate = float(calculated_distance)
+                        
+                        # Opțional: Afișăm distanța estimată direct pe imaginea video
+                        cv2.putText(frame, f"Dist: {calculated_distance:.2f}m", 
+                                    (int(keypoints[0][0]), int(keypoints[0][1]) - 20), 
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                # --- MODIFICARE PINHOLE END ---
 
                 self.draw_skeleton(frame, keypoints, scores)
 
