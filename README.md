@@ -34,7 +34,7 @@ cbrn/
 ├── build/                        # Fisiere binare generate (ignorat in git)
 ├── install/                      # Fisiere executabile și scripturi setup (ignorat in git)
 └── log/                          # Jurnalele de execuție ROS 2
-
+```
 ## 🛠️ Mediul de Dezvoltare și Dependințe
 
 Acest proiect a fost configurat și testat folosind următorul mediu. Toate problemele de configurare (dependințe lipsă, conflicte de mediu) au fost rezolvate.
