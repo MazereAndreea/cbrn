@@ -18,7 +18,7 @@ gz service -s /world/cbrn_world/set_pose \
     --reqtype gz.msgs.Pose \
     --reptype gz.msgs.Boolean \
     --timeout 5000 \
-    --req 'name: "cbrn_robot", position: {x: 0.0, y: 0.0, z: 0.05}'
+    --req 'name: "cbrn_robot", position: {x: 10.0, y: 0.0, z: 0.05}'
 
 # ---------------------------------------------------------------------------
 # 2. Place the person model 3 m ahead of the robot
@@ -28,7 +28,7 @@ gz service -s /world/cbrn_world/set_pose \
     --reqtype gz.msgs.Pose \
     --reptype gz.msgs.Boolean \
     --timeout 5000 \
-    --req 'name: "person_standing", position: {x: 3.0, y: 0.0, z: 0.0}'
+    --req 'name: "person_standing", position: {x: 0.0, y: 0.0, z: 0.0}'
 
 sleep 1
 
