@@ -65,7 +65,7 @@ def generate_launch_description():
             package='ros_gz_sim',
             executable='create',
             arguments=[
-                '-file', sdf_path,
+                '-topic', '/robot_description',
                 '-entity', 'cbrn_robot',
                 '-x', '0', '-y', '0', '-z', '0.5'
             ],

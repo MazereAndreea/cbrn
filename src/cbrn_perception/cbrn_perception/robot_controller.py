@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import TwistStamped, Point
+from geometry_msgs.msg import Twist, Point
 import csv
 import time
 import os
@@ -22,7 +22,7 @@ class RobotController(Node):
         
         # 2. Publisher către Robot
         self.cmd_pub = self.create_publisher(
-            TwistStamped, 
+            Twist, 
             "/diff_drive_controller/cmd_vel", 
             10
         )
@@ -50,38 +50,46 @@ class RobotController(Node):
         """
         
         # --- LOGICA DE MIȘCARE ---
-        Kp_turn = -2.0   # Ajustează sensibilitatea rotirii
-        Kp_forward = 0.3
+        Kp_turn = -2.0
+        Kp_forward = 0.4
         desired_distance = 1.0
+
+        turn_speed = Kp_turn * msg.x
+        forward_speed = Kp_forward * (msg.z - desired_distance)
+
+        # clamp (FOARTE IMPORTANT)
+        forward_speed = max(min(forward_speed, 0.5), -0.2)
+        turn_speed = max(min(turn_speed, 1.0), -1.0)
         
-        # Dacă distanța e 0 sau 5.0 (default), înseamnă că nu vede nimic clar
-        if msg.z == 0.0 or msg.z >= 5.0:
-            forward_speed = 0.0
-            turn_speed = 0.5 # Căutare (rotire pe loc)
-            detected = False
-        else:
+        detected = False
+
+        if msg.z > 0.0 and msg.z < 5.0:
             forward_speed = 0.0
             turn_speed = 0.0
-            # # PID Simplu
-            # turn_speed = Kp_turn * msg.x
-            # forward_speed = Kp_forward * (msg.z - desired_distance)
-            
-            # # Limitări (Clamp)
-            # forward_speed = max(min(forward_speed, 0.4), -0.1)
-            # turn_speed = max(min(turn_speed, 1.0), -1.0)
-            
-            # # Oprire de siguranță
-            # if msg.z < 0.8:
-            #     forward_speed = 0.0
-            
             detected = True
 
+            self.writer.writerow([
+                time.time(),
+                self.get_parameter("model_name").value,
+                msg.z,
+                msg.x,
+                forward_speed,
+                turn_speed
+            ])
+            self.file.flush()
+
+            self.get_logger().info(f"🎯 Detectat la {msg.z:.2f} m")
+            sys.exit(0)
+
+        else:
+            forward_speed = 1.0
+            turn_speed = 0.0
+
         # Trimitere comandă
-        cmd = TwistStamped()
-        cmd.header.stamp = self.get_clock().now().to_msg()
+        cmd = Twist()
+        cmd.linear.x = float(forward_speed)
+        cmd.angular.z = float(turn_speed)
         cmd.header.frame_id = "base_link"
-        cmd.twist.linear.x = float(forward_speed)
-        cmd.twist.angular.z = float(turn_speed)
         self.cmd_pub.publish(cmd)
 
         # --- LOGARE ÎN EXCEL ---

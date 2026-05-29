@@ -30,6 +30,7 @@ setup(
             'ResNet50_detector = cbrn_perception.ResNet50_detector:main',
             'vitpose_detector = cbrn_perception.vitpose_detector:main',
             'mmpose_detector = cbrn_perception.mmpose_detector:main',
+            'colector_distanta = cbrn_perception.colector_distanta:main',
         ],
     },
 )

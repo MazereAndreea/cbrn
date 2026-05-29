@@ -37,7 +37,7 @@
         <xacro:if value="${sim_mode}">
             <ros2_control name="GazeboSystem" type="system">
                 <hardware>
-                    <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+                    <plugin>gz_ros2_control/GazeboSimROS2ControlPlugin</plugin>
                 </hardware>
                 <joint name="left_wheel_joint">
                     <command_interface name="velocity">
