@@ -6,14 +6,27 @@ import rclpy
 import rclpy.parameter
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
-from geometry_msgs.msg import TwistStamped, Point
+from geometry_msgs.msg import Twist
+from cbrn_interfaces.msg import PerceptionMetrics
 from datetime import datetime
 
 
-STOP_DISTANCE = 1.5   # metres — stop when person is this close
-SEARCH_SPEED  = 0.3   # m/s forward when no detection yet
-Kp_TURN       = 2.0   # proportional gain for heading correction
-MAX_DRIVE_TIME = 60.0 # seconds — abort if person never detected
+SEARCH_SPEED   = 0.3   # m/s forward while searching
+Kp_TURN        = 2.0   # proportional heading-correction gain
+MAX_DRIVE_TIME = 60.0  # seconds — abort if person never detected
+
+# ----- Detection quality thresholds ----------------------------------------
+# skeleton_completeness: fraction of [shoulders 5,6 | elbows 7,8 | wrists 9,10]
+# detected above their per-model confidence threshold (0.0 – 1.0).
+#
+#   0.50  → at least 3/6 critical keypoints visible
+#           (minimum to locate the injection zone)
+#   0.67  → at least 4/6 (both shoulders identified, enables L/R classification)
+#
+# confidence_score_min: mean score across all 17 keypoints — prevents stopping
+# on a frame that is technically "complete" but overall noisy.
+SKELETON_COMPLETENESS_THRESHOLD = 0.5   # ≥ 3 of 6 critical KPs detected
+CONFIDENCE_SCORE_MIN             = 0.4  # mean keypoint confidence floor
 
 
 class RobotController(Node):
@@ -41,7 +54,7 @@ class RobotController(Node):
         self._csv = csv.writer(self._csv_file)
         self._csv.writerow(
             ["Timestamp", "Model", "Detected_Distance_m", "Horizontal_Error",
-             "Linear_Vel", "Angular_Vel"]
+             "Linear_Vel", "Angular_Vel", "Skeleton_Completeness", "Confidence_Avg"]
         )
         self.get_logger().info(f"Logging to {log_path}")
 
@@ -50,11 +63,11 @@ class RobotController(Node):
         self._start_time = time.monotonic()
 
         self._cmd_pub = self.create_publisher(
-            TwistStamped, "/diff_drive_controller/cmd_vel", 10
+            Twist, "/diff_drive_controller/cmd_vel", 10
         )
 
-        self._target_sub = self.create_subscription(
-            Point, "/pose_estimation/image_result", self._control_cb, 10
+        self._metrics_sub = self.create_subscription(
+            PerceptionMetrics, "/pose_estimation/metrics", self._control_cb, 10
         )
 
         # Safety timer: stop if no detection after MAX_DRIVE_TIME seconds.
@@ -63,14 +76,13 @@ class RobotController(Node):
     # ------------------------------------------------------------------
 
     def _publish(self, linear_x: float, angular_z: float):
-        msg = TwistStamped()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "base_link"
-        msg.twist.linear.x = float(linear_x)
-        msg.twist.angular.z = float(angular_z)
+        msg = Twist()
+        msg.linear.x = float(linear_x)
+        msg.angular.z = float(angular_z)
         self._cmd_pub.publish(msg)
 
-    def _log(self, distance, horizontal_err, linear_v, angular_v):
+    def _log(self, distance, horizontal_err, linear_v, angular_v,
+             completeness=0.0, confidence=0.0):
         self._csv.writerow([
             time.time(),
             self._model_name,
@@ -78,6 +90,8 @@ class RobotController(Node):
             f"{horizontal_err:.3f}",
             f"{linear_v:.3f}",
             f"{angular_v:.3f}",
+            f"{completeness:.3f}",
+            f"{confidence:.3f}",
         ])
         self._csv_file.flush()
 
@@ -101,38 +115,51 @@ class RobotController(Node):
                 f"Timeout ({MAX_DRIVE_TIME}s): person not detected — stopping."
             )
 
-    def _control_cb(self, msg: Point):
-        """
-        msg.x = normalised horizontal deviation (-0.5 left … +0.5 right)
-        msg.z = estimated distance to person in metres  (0 = no detection)
+    def _control_cb(self, msg: PerceptionMetrics):
+        """Stop when the model reports a detection with sufficient quality.
+
+        Stop condition (AND):
+          1. msg.is_detected             — model found a person this frame
+          2. skeleton_completeness >= 0.5 — ≥ 3/6 critical keypoints (shoulders,
+                                            elbows, wrists) detected above threshold
+          3. confidence_score >= 0.4     — mean keypoint confidence floor
+
+        While the condition is not met the robot drives forward at SEARCH_SPEED
+        and, if a partial detection exists, corrects its heading toward the person.
         """
         if self._stopped:
             return
 
-        distance = msg.z
-        horizontal_err = msg.x
+        completeness = msg.skeleton_completeness
+        confidence   = msg.confidence_score
+        distance     = msg.distance_estimate
+        # Horizontal error from nose keypoint (index 0), normalised −0.5…+0.5
+        horizontal_err = (msg.keypoint_x[0] - 0.5) if msg.keypoint_x else 0.0
 
-        if distance <= 0.0:
-            # No valid detection — drive forward to search.
-            self._publish(SEARCH_SPEED, 0.0)
-            self._log(0.0, 0.0, SEARCH_SPEED, 0.0)
-            return
+        detection_good = (
+            msg.is_detected
+            and completeness >= SKELETON_COMPLETENESS_THRESHOLD
+            and confidence   >= CONFIDENCE_SCORE_MIN
+        )
 
-        if distance <= STOP_DISTANCE:
-            self._log(distance, horizontal_err, 0.0, 0.0)
+        if detection_good:
+            self._log(distance, horizontal_err, 0.0, 0.0, completeness, confidence)
             self._stop_and_exit(
-                f"Person detected at {distance:.2f} m — stopping."
+                f"Detection quality met — completeness={completeness:.2f} "
+                f"confidence={confidence:.2f} dist≈{distance:.2f}m — stopping."
             )
             return
 
-        # Approach: scale speed by remaining distance, correct heading.
-        forward = min(SEARCH_SPEED, SEARCH_SPEED * (distance - STOP_DISTANCE) / STOP_DISTANCE)
-        turn = max(-1.0, min(1.0, -Kp_TURN * horizontal_err))
+        # Not yet good enough — keep driving forward, correct heading if partial.
+        turn = 0.0
+        if msg.is_detected and horizontal_err != 0.0:
+            turn = max(-1.0, min(1.0, -Kp_TURN * horizontal_err))
 
-        self._publish(forward, turn)
-        self._log(distance, horizontal_err, forward, turn)
+        self._publish(SEARCH_SPEED, turn)
+        self._log(distance, horizontal_err, SEARCH_SPEED, turn, completeness, confidence)
         self.get_logger().info(
-            f"Approaching: dist={distance:.2f}m  fwd={forward:.2f}  turn={turn:.2f}"
+            f"Searching: completeness={completeness:.2f} "
+            f"confidence={confidence:.2f} fwd={SEARCH_SPEED:.2f} turn={turn:.2f}"
         )
 
 

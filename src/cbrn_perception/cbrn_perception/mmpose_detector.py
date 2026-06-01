@@ -4,6 +4,7 @@ from rclpy.node import Node
 from rcl_interfaces.msg import SetParametersResult
 from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import Point
+from std_msgs.msg import Float64
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
@@ -13,206 +14,240 @@ import os
 from datetime import datetime
 from cbrn_interfaces.msg import PerceptionMetrics
 
-# --- FIX REGISTRY PENTRU MODELE ONE-STAGE ---
+HAS_DISPLAY = bool(os.environ.get("DISPLAY"))
+
 from mmengine.registry import MODELS
 try:
     import mmdet.models
     import mmpretrain.models
-    # Permitem mmpose să vadă componentele de detecție necesare RTMO
     MODELS.import_from_lib('mmdet')
 except Exception as e:
-    print(f"[WARN] Eroare la încărcarea registrelor: {e}")
+    print(f"[WARN] Registry import error: {e}")
 
 try:
     from mmpose.apis import MMPoseInferencer
 except ImportError:
-    print("❌ EROARE: MMPose nu este instalat.")
+    print("ERROR: MMPose not installed.")
     exit()
+
+# COCO critical keypoint indices used for skeleton_completeness
+CRITICAL_KP = [5, 6, 7, 8, 9, 10]  # shoulders, elbows, wrists
+CONFIDENCE_THRESHOLD = 0.3
+
+
+def _compute_completeness(scores, threshold=CONFIDENCE_THRESHOLD):
+    if len(scores) < 17:
+        return 0.0
+    detected = sum(1 for i in CRITICAL_KP if scores[i] >= threshold)
+    return detected / len(CRITICAL_KP)
+
 
 class UniversalPoseDetector(Node):
     def __init__(self):
-        self.image_saved = False
         super().__init__("universal_pose_detector")
         self.bridge = CvBridge()
-        
-        # DECLARE PARAMETERS 
-        self.declare_parameter("model_config", "human") 
-        self.declare_parameter("device", "cuda")                   
+        self.image_saved = False
+
+        self.declare_parameter("model_config", "human")
+        self.declare_parameter("device", "cuda")
         self.declare_parameter("csv_output", True)
 
         self.add_on_set_parameters_callback(self.parameter_callback)
-        
-        self.timer_callback()
-        self.focal_length = 800.0 # Valoare implicită, va fi actualizată de camera_info_cb
-        # 2. Ne abonăm la informațiile camerei din Gazebo pentru a lua distanța focală reală
-        self.camera_info_sub = self.create_subscription(CameraInfo, "/camera/camera_info", self.camera_info_cb, 10)
+        self._load_model(
+            self.get_parameter("model_config").value,
+            self.get_parameter("device").value,
+        )
 
-        self.image_sub = self.create_subscription(Image, "/camera", self.img_cb, 10)
+        self.focal_length = 800.0
+        self.robot_distance_gt = 0.0
+
+        self.camera_info_sub = self.create_subscription(
+            CameraInfo, "/camera/camera_info", self.camera_info_cb, 10
+        )
+        self.image_sub = self.create_subscription(
+            Image, "/camera", self.img_cb, 10
+        )
+        self.distance_gt_sub = self.create_subscription(
+            Float64, "/bench/robot_distance_gt", self.distance_gt_cb, 10
+        )
+
         self.target_pub = self.create_publisher(Point, "/perception/target", 10)
-        self.result_image_pub = self.create_publisher(Image, "/pose_estimation/image_result", 10)
-        
-        # Setup CSV 
-        self.metrics_pub = self.create_publisher(PerceptionMetrics, "/pose_estimation/metrics", 10)    
+        self.result_image_pub = self.create_publisher(
+            Image, "/pose_estimation/image_result", 10
+        )
+        self.metrics_pub = self.create_publisher(
+            PerceptionMetrics, "/pose_estimation/metrics", 10
+        )
+
         self.setup_csv()
 
-    def camera_info_cb(self, msg):
-        # Extragem distanța focală (fx) din matricea K a camerei din Gazebo
-        if msg.k[0] > 0:
-            self.focal_length = msg.k[0]
-        
-    def timer_callback(self):
-        # Get parameter values
-        model_cfg = self.get_parameter("model_config").get_parameter_value().string_value
-        device = self.get_parameter("device").get_parameter_value().string_value
-        
+    def _load_model(self, model_cfg, device):
         self.get_logger().info(f"Loading model: {model_cfg} on {device}...")
-        self.get_logger().info("Se încarcă modelul ...")
-        
         try:
             self.inferencer = MMPoseInferencer(
-                pose2d=model_cfg, 
-                device=device,
-                scope='mmpose'
+                pose2d=model_cfg, device=device, scope="mmpose"
             )
         except Exception as e:
-            self.get_logger().error(f"Eroare la încărcarea RTMO: {e}")
+            self.get_logger().error(f"Failed to load model: {e}")
             exit()
 
     def parameter_callback(self, params):
         for param in params:
             if param.name == "model_config":
-                self.get_logger().warn(f"Reîncarc modelul cu: {param.value}")
-                
+                self.get_logger().warn(f"Reloading model: {param.value}")
                 try:
                     self.inferencer = MMPoseInferencer(
                         pose2d=param.value,
                         device=self.get_parameter("device").value,
-                        scope='mmpose'
+                        scope="mmpose",
                     )
+                    self.setup_csv()
                 except Exception as e:
-                    self.get_logger().error(f"Nu s-a putut schimba modelul: {e}")
+                    self.get_logger().error(f"Model reload failed: {e}")
                     return SetParametersResult(successful=False, reason=str(e))
-                    
         return SetParametersResult(successful=True)
+
+    def camera_info_cb(self, msg):
+        if msg.k[0] > 0:
+            self.focal_length = msg.k[0]
+
+    def distance_gt_cb(self, msg):
+        self.robot_distance_gt = msg.data
 
     def setup_csv(self):
         timestamp = datetime.now().strftime("%H%M%S")
         directory = os.path.expanduser("~/cbrn_ws/csv")
-        if not os.path.exists(directory): os.makedirs(directory)
-        self.csv_filename = os.path.join(directory, f"landmarks_pose_{timestamp}.csv")
-        self.csv_file = open(self.csv_filename, mode='w', newline='')
+        os.makedirs(directory, exist_ok=True)
+        model_name = self.get_parameter("model_config").value.replace("/", "_")
+        self.csv_filename = os.path.join(
+            directory, f"landmarks_{model_name}_{timestamp}.csv"
+        )
+        self.csv_file = open(self.csv_filename, mode="w", newline="")
         self.writer = csv.writer(self.csv_file)
-        header = ["Timestamp"]
-        self.writer.writerow([header, "Inference_Time", "Confidence"])
-        for i in range(17): header.extend([f"KP_{i}_x", f"KP_{i}_y", f"KP_{i}_conf"])
+        header = (
+            ["Timestamp", "Model", "Inference_ms", "Is_Detected",
+             "Confidence_Avg", "Skeleton_Completeness", "Distance_Estimate_m",
+             "Distance_GT_m"]
+            + [f"KP_{i}_x" for i in range(17)]
+            + [f"KP_{i}_y" for i in range(17)]
+            + [f"KP_{i}_conf" for i in range(17)]
+        )
         self.writer.writerow(header)
 
     def img_cb(self, msg):
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-        except: return
+        except Exception:
+            return
 
-        # --- MASURARE TIMP START ---
+        h, w = frame.shape[:2]
         t_start = time.perf_counter()
-
-
-        # Inferență - RTMO procesează tot cadrul dintr-o singură trecere
         result_generator = self.inferencer(frame, return_vis=False)
         result = next(result_generator)
-        predictions = result['predictions']
+        inference_time = time.perf_counter() - t_start
 
-         # --- MASURARE TIMP FINAL ---
-        t_end = time.perf_counter()
-        inference_time = t_end - t_start
+        predictions = result["predictions"]
 
-        # Pregătire mesaj Metrics
-        metrics_msg = PerceptionMetrics()
-        metrics_msg.model_name = self.get_parameter("model_config").value
-        metrics_msg.header = msg.header
-        metrics_msg.inference_time = float(inference_time)
-        metrics_msg.is_detected = False
-        metrics_msg.confidence_score = 0.0
-        metrics_msg.distance_estimate = 0.0
+        metrics = PerceptionMetrics()
+        metrics.header = msg.header
+        metrics.model_name = self.get_parameter("model_config").value
+        metrics.inference_time = float(inference_time)
+        metrics.is_detected = False
+        metrics.confidence_score = 0.0
+        metrics.distance_estimate = 0.0
+        metrics.skeleton_completeness = 0.0
+        metrics.robot_distance_gt = self.robot_distance_gt
+        metrics.keypoint_scores = [0.0] * 17
+        metrics.keypoint_x = [0.0] * 17
+        metrics.keypoint_y = [0.0] * 17
 
         if predictions and len(predictions[0]) > 0:
+            metrics.is_detected = True
+            person = predictions[0][0]
+            keypoints = np.array(person["keypoints"])
+            scores = np.array(person["keypoint_scores"])
 
-            metrics_msg.is_detected = True
-            # Handle list of lists structure often returned by MMPose
-            persons = predictions[0] if isinstance(predictions[0], list) else predictions[0]
-            for person in persons:
-                keypoints = np.array(person['keypoints'])
-                scores = np.array(person['keypoint_scores'])
+            n = min(len(scores), 17)
+            kp_scores = [0.0] * 17
+            kp_x = [0.0] * 17
+            kp_y = [0.0] * 17
+            for i in range(n):
+                kp_scores[i] = float(scores[i])
+                kp_x[i] = float(keypoints[i][0] / w)
+                kp_y[i] = float(keypoints[i][1] / h)
 
-                metrics_msg.confidence_score = float(np.mean(scores))
+            metrics.keypoint_scores = kp_scores
+            metrics.keypoint_x = kp_x
+            metrics.keypoint_y = kp_y
+            metrics.confidence_score = float(np.mean(scores[:n]))
+            metrics.skeleton_completeness = _compute_completeness(kp_scores)
 
-                # --- MODIFICARE PINHOLE START ---
-                REAL_HEIGHT = 1.70 # Constanta fizică: Presupunem înălțimea persoanei de 1.70 metri
-                
-                # Extragem doar coordonatele Y ale punctelor care au fost detectate cu încredere > 0.1
-                valid_y_coords = [kp[1] for kp, score in zip(keypoints, scores) if score > 0.1]
-                
-                if len(valid_y_coords) > 2:
-                    # Înălțimea pe ecran (h) este diferența dintre cel mai de jos punct (max Y) și cel mai de sus (min Y)
-                    h_pixels = max(valid_y_coords) - min(valid_y_coords)
-                    
-                    # Evităm împărțirea la zero și cazurile aberante
-                    if h_pixels > 20: 
-                        # Aplicăm formula D = (f * H) / h
-                        calculated_distance = (self.focal_length * REAL_HEIGHT) / h_pixels
-                        metrics_msg.distance_estimate = float(calculated_distance)
-                        
-                        # Opțional: Afișăm distanța estimată direct pe imaginea video
-                        cv2.putText(frame, f"Dist: {calculated_distance:.2f}m", 
-                                    (int(keypoints[0][0]), int(keypoints[0][1]) - 20), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-                # --- MODIFICARE PINHOLE END ---
+            # Pinhole distance estimate
+            valid_y = [keypoints[i][1] for i in range(n) if scores[i] > 0.1]
+            if len(valid_y) > 2:
+                h_px = max(valid_y) - min(valid_y)
+                if h_px > 20:
+                    metrics.distance_estimate = float(
+                        (self.focal_length * 1.70) / h_px
+                    )
 
-                self.draw_skeleton(frame, keypoints, scores)
+            self._draw_skeleton(frame, keypoints, scores, n)
 
-                # Publish Target (Nose)
-                target_msg = Point()
-                target_msg.x = float((keypoints[0][0] / frame.shape[1]) - 0.5)
-                self.target_pub.publish(target_msg)
+            target = Point()
+            target.x = float(keypoints[0][0] / w - 0.5)
+            self.target_pub.publish(target)
 
-        # Output
-        self.metrics_pub.publish(metrics_msg)
+            # CSV row
+            self.writer.writerow(
+                [time.time(), metrics.model_name,
+                 round(inference_time * 1000, 2),
+                 metrics.is_detected, round(metrics.confidence_score, 4),
+                 round(metrics.skeleton_completeness, 4),
+                 round(metrics.distance_estimate, 3),
+                 round(self.robot_distance_gt, 3)]
+                + kp_x + kp_y + kp_scores
+            )
+            self.csv_file.flush()
+
+        self.metrics_pub.publish(metrics)
+
         out_msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
         self.result_image_pub.publish(out_msg)
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('s'):
-            save_dir = "/home/ai/cbrn/cbrn/src/models_images"
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            model_cfg = self.get_parameter("model_config").value
-            filename = os.path.join(save_dir, f"{model_cfg}_{timestamp}.png")
-            cv2.imwrite(filename, frame)
-            self.image_saved = True
-        cv2.imshow("MMPose Universal Monitor", frame)
-        cv2.waitKey(1)
 
-    def draw_skeleton(self, frame, keypoints, scores):
+        if HAS_DISPLAY:
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("s"):
+                save_dir = os.path.expanduser("~/cbrn_ws/snapshots")
+                os.makedirs(save_dir, exist_ok=True)
+                fname = os.path.join(
+                    save_dir,
+                    f"{metrics.model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png",
+                )
+                cv2.imwrite(fname, frame)
+            cv2.imshow("MMPose Universal Monitor", frame)
+
+    def _draw_skeleton(self, frame, keypoints, scores, n):
         SKELETON = [
-                    (5, 7), (7, 9),        # left arm
-                    (6, 8), (8, 10),       # right arm
-                    (5, 6),                # shoulders
-                    (5, 11), (6, 12),      # torso upper
-                    (11, 12),              # hips
-                    (11, 13), (13, 15),    # left leg
-                    (12, 14), (14, 16),    # right leg
-                    (0, 1), (0, 2),        # face
-                    (1, 3), (2, 4)
-                ]
+            (5, 7), (7, 9), (6, 8), (8, 10),
+            (5, 6), (5, 11), (6, 12), (11, 12),
+            (11, 13), (13, 15), (12, 14), (14, 16),
+            (0, 1), (0, 2), (1, 3), (2, 4),
+        ]
         for p1, p2 in SKELETON:
-                # Verificăm dacă indicii există în modelul curent (important pentru WholeBody)
-                if p1 < len(keypoints) and p2 < len(keypoints):
-                    if scores[p1] > 0.1 and scores[p2] > 0.1:
-                        pt1 = (int(keypoints[p1][0]), int(keypoints[p1][1]))
-                        pt2 = (int(keypoints[p2][0]), int(keypoints[p2][1]))
-                        cv2.line(frame, pt1, pt2, (255, 0, 0), 2) # Linie albastră, grosime 2
-            
-            # Draw results
-        for kp, score in zip(keypoints, scores):
-            if score > 0.1:
-                cv2.circle(frame, (int(kp[0]), int(kp[1])), 5, (0, 255, 0), -1)
+            if p1 < n and p2 < n and scores[p1] > 0.1 and scores[p2] > 0.1:
+                cv2.line(
+                    frame,
+                    (int(keypoints[p1][0]), int(keypoints[p1][1])),
+                    (int(keypoints[p2][0]), int(keypoints[p2][1])),
+                    (255, 0, 0), 2,
+                )
+        for i in range(n):
+            if scores[i] > 0.1:
+                cv2.circle(
+                    frame, (int(keypoints[i][0]), int(keypoints[i][1])), 5,
+                    (0, 255, 0), -1,
+                )
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -226,6 +261,6 @@ def main(args=None):
         node.destroy_node()
         rclpy.shutdown()
 
-# --- ACEST BLOC ESTE CRITIC PENTRU CA NODUL SĂ RULEZE ---
+
 if __name__ == "__main__":
     main()

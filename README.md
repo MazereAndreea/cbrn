@@ -95,7 +95,7 @@ ros2 run cbrn_perception mmpose_detector
 
 # TERMINAL 2:
 source ~/cbrn/cbrn/install/setup.bash
-./test_automat.sh [NUME MODEL]
+./run_bench.sh [NUME MODEL]
 
 # Universal Pose Detector - Perception Metrics
 
