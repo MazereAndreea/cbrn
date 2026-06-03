@@ -1,4 +1,4 @@
-from setuptools import find_packages, setup
+from setuptools import setup
 import os
 from glob import glob
 
@@ -31,6 +31,8 @@ setup(
             'vitpose_detector = cbrn_perception.vitpose_detector:main',
             'mmpose_detector = cbrn_perception.mmpose_detector:main',
             'colector_distanta = cbrn_perception.colector_distanta:main',
+            'injection_zone_analyzer = cbrn_perception.injection_zone_analyzer:main',
+            'scenario_orchestrator = cbrn_perception.scenario_orchestrator:main',
         ],
     },
 )

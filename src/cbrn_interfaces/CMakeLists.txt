@@ -12,6 +12,8 @@ find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PerceptionMetrics.msg"
+  "msg/KeypointArray.msg"
+  "msg/InjectionZone.msg"
   DEPENDENCIES std_msgs
 )
 

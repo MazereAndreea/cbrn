@@ -145,3 +145,5 @@ f = Distanța focală a camerei în pixeli (extrasă live de pe topicul /camera/
 H = Înălțimea reală presupusă a persoanei (1.70 metri).h = Înălțimea persoanei pe ecran, în pixeli.
 
 Nota: Robotul transmite distanta din momentul detectarii nasului persoanei (key[0], cel mai inalt punct)
+
+If your bench starting distance ever changes from the default 3 m, adjust MAX_APPROACH_TRAVEL_M accordingly.

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
+import math
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, LaserScan, CameraInfo
 from geometry_msgs.msg import Point
+from nav_msgs.msg import Odometry
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
@@ -10,180 +12,352 @@ import csv
 import time
 import os
 from datetime import datetime
-from mmengine.registry import MODELS
-import mmpretrain.models
 
-# --- FIX MANUAL PENTRU REGISTRY (BRIDGE) ---
+from cbrn_interfaces.msg import KeypointArray, InjectionZone
+
+# ── Registry bridge — required before mmpose/mmpretrain imports ───────────────
+from mmengine.registry import MODELS
 try:
     import mmpretrain.models
-    from mmpose.registry import MODELS as MMPOSE_MODELS
+    from mmpose.registry    import MODELS as MMPOSE_MODELS
     from mmpretrain.registry import MODELS as PRETRAIN_MODELS
-    
-    # Înregistrăm manual VisionTransformer în registrul mmpose
     if 'VisionTransformer' in PRETRAIN_MODELS.module_dict:
-        vt_module = PRETRAIN_MODELS.get('VisionTransformer')
-        # Îl înregistrăm cu ambele nume posibile pentru siguranță
-        MMPOSE_MODELS.register_module(name='VisionTransformer', module=vt_module, force=True)
-        MMPOSE_MODELS.register_module(name='mmpretrain.VisionTransformer', module=vt_module, force=True)
-        print("[INFO] VisionTransformer a fost mapat manual în mmpose.")
+        vt = PRETRAIN_MODELS.get('VisionTransformer')
+        MMPOSE_MODELS.register_module(name='VisionTransformer',            module=vt, force=True)
+        MMPOSE_MODELS.register_module(name='mmpretrain.VisionTransformer', module=vt, force=True)
 except Exception as e:
-    print(f"[WARN] Eroare la maparea registrelor: {e}")
+    print(f'[WARN] Registry bridge error: {e}')
 
-# --- IMPORTURI SPECIFICE MMPOSE ---
 try:
     from mmpose.apis import MMPoseInferencer
 except ImportError:
-    print("❌ EROARE: MMPose nu este instalat. Rulează: mim install mmpose")
-    exit()
+    print('ERROR: MMPose not installed. Run: mim install mmpose')
+    raise
 
-CONFIDENCE_THRESHOLD = 0.3
+# ── COCO 17-keypoint indices ─────────────────────────────────────────────────
+NOSE       = 0
+L_SHOULDER = 5;  R_SHOULDER = 6
+L_ELBOW    = 7;  R_ELBOW    = 8
+L_WRIST    = 9;  R_WRIST    = 10
+L_HIP      = 11; R_HIP      = 12
+
+CRITICAL_IDX   = [L_SHOULDER, R_SHOULDER, L_ELBOW, R_ELBOW, L_WRIST, R_WRIST]
+CRITICAL_NAMES = ['LShoulder', 'RShoulder', 'LElbow', 'RElbow', 'LWrist', 'RWrist']
+
+CONF_THRESHOLD = 0.3
+WORK_OFFSET_M  = 0.5
+
+SKELETON = [
+    (5, 7), (7, 9), (6, 8), (8, 10),
+    (5, 6), (5, 11), (6, 12), (11, 12),
+    (11, 13), (13, 15), (12, 14), (14, 16),
+    (0, 1), (0, 2), (1, 3), (2, 4),
+]
+
+# ── Shared helpers (COCO-17) ─────────────────────────────────────────────────
+
+def classify_body_position(kp_conf):
+    T  = CONF_THRESHOLD
+    ls = kp_conf[L_SHOULDER] if L_SHOULDER < len(kp_conf) else 0.0
+    rs = kp_conf[R_SHOULDER] if R_SHOULDER < len(kp_conf) else 0.0
+    n  = kp_conf[NOSE]       if NOSE       < len(kp_conf) else 0.0
+    both = ls > T and rs > T
+    if both:
+        return 'face_up' if n > T else 'face_down'
+    diff = ls - rs
+    if abs(diff) > 0.2:
+        if ls > rs and ls > T:
+            return 'lateral_right'
+        if rs > ls and rs > T:
+            return 'lateral_left'
+    return 'unknown'
+
+
+def select_injection_zone(kp_xy_norm, kp_conf, body_pos, frame_w, frame_h):
+    """Returns (zone_type, px, py, confidence) or None. kp_xy_norm: (17,2) normalized."""
+    T = CONF_THRESHOLD
+
+    def kpx(i): return int(kp_xy_norm[i][0] * frame_w)
+    def kpy(i): return int(kp_xy_norm[i][1] * frame_h)
+
+    def deltoid(sh_i, el_i):
+        x = kpx(sh_i) + int(0.3 * (kpx(el_i) - kpx(sh_i)))
+        y = kpy(sh_i) + int(0.3 * (kpy(el_i) - kpy(sh_i)))
+        return x, y, float(min(kp_conf[sh_i], kp_conf[el_i]))
+
+    def arm_mid(el_i, wr_i):
+        return (kpx(el_i) + kpx(wr_i)) // 2, (kpy(el_i) + kpy(wr_i)) // 2, \
+               float(min(kp_conf[el_i], kp_conf[wr_i]))
+
+    primaries = {
+        'face_up':       [('deltoid_right', L_SHOULDER, L_ELBOW),
+                          ('deltoid_left',  R_SHOULDER, R_ELBOW)],
+        'face_down':     [('deltoid_left',  R_SHOULDER, R_ELBOW),
+                          ('deltoid_right', L_SHOULDER, L_ELBOW)],
+        'lateral_right': [('deltoid_right', L_SHOULDER, L_ELBOW)],
+        'lateral_left':  [('deltoid_left',  R_SHOULDER, R_ELBOW)],
+        'unknown':       [('deltoid_right', L_SHOULDER, L_ELBOW),
+                          ('deltoid_left',  R_SHOULDER, R_ELBOW)],
+    }
+    for zone_type, sh_i, el_i in primaries.get(body_pos, []):
+        if kp_conf[sh_i] > T and kp_conf[el_i] > T:
+            dx, dy, c = deltoid(sh_i, el_i)
+            return zone_type, dx, dy, c
+
+    for zone_type, el_i, wr_i in [('arm_mid_left', L_ELBOW, L_WRIST),
+                                   ('arm_mid_right', R_ELBOW, R_WRIST)]:
+        if kp_conf[el_i] > T and kp_conf[wr_i] > T:
+            mx, my, c = arm_mid(el_i, wr_i)
+            return zone_type, mx, my, c
+    return None
+
+
+def estimate_distance_from_bbox(bbox_w_px, bbox_h_px, focal_length, ref_m=0.45):
+    ref_px = max(bbox_w_px, bbox_h_px)
+    if ref_px < 10 or focal_length <= 0:
+        return None
+    return (focal_length * ref_m) / ref_px
+
+
+def compute_nav2_goal(zone_px, frame_w, focal_length, dist_m,
+                       robot_x, robot_y, robot_yaw, work_offset=WORK_OFFSET_M):
+    angle_h  = math.atan2(zone_px - frame_w / 2.0, focal_length)
+    zone_r_x = dist_m * math.cos(angle_h)
+    zone_r_y = dist_m * math.sin(angle_h)
+    cos_y, sin_y = math.cos(robot_yaw), math.sin(robot_yaw)
+    zone_m_x = robot_x + zone_r_x * cos_y - zone_r_y * sin_y
+    zone_m_y = robot_y + zone_r_x * sin_y + zone_r_y * cos_y
+    approach_yaw = math.atan2(zone_m_y - robot_y, zone_m_x - robot_x)
+    goal_x = zone_m_x - work_offset * math.cos(approach_yaw)
+    goal_y = zone_m_y - work_offset * math.sin(approach_yaw)
+    return goal_x, goal_y, approach_yaw
+
+
+# ── ROS2 Node ─────────────────────────────────────────────────────────────────
 
 class ViTPoseDetector(Node):
     def __init__(self):
-        super().__init__("vitpose_detector")
+        super().__init__('vitpose_detector')
         self.bridge = CvBridge()
-        
-        # 1. Încărcare Model ViTPose
-        # 'pose2d' specifică modelul de postură (vitpose)
-        # 'det_model' specifică cine găsește cutia (folosim yolox pentru viteză)
-        self.get_logger().info("Se încarcă ViTPose (poate dura la prima rulare)...")
-        
+
+        self.get_logger().info('Loading ViTPose-base (first run downloads weights)…')
         try:
-            # Folosim 'vitpose-b' (Base) pentru un balans bun viteză/precizie
-            # Sau 'vitpose-h' (Huge) pentru precizie maximă dar lent
-            self.inferencer = MMPoseInferencer(
-                pose2d='vitpose-b',  
-                device='cpu'
-            )
+            self.inferencer = MMPoseInferencer(pose2d='vitpose-b', device='cpu')
         except Exception as e:
-            self.get_logger().error(f"Eroare la încărcarea modelului: {e}")
-            exit()
+            self.get_logger().error(f'Failed to load ViTPose: {e}')
+            raise
 
-        self.image_sub = self.create_subscription(Image, "/camera", self.img_cb, 10)
-        self.depth_sub = self.create_subscription(Image, "/camera/depth", self.depth_cb, 10)
-        self.target_pub = self.create_publisher(Point, "/perception/target", 10)
-        self.result_image_pub = self.create_publisher(Image, "/pose_estimation/image_result", 10)
-        
-        self.depth_image = None
+        # Publishers
+        self.target_pub = self.create_publisher(Point,         '/perception/target',            10)
+        self.result_pub = self.create_publisher(Image,         '/pose_estimation/image_result', 10)
+        self.kp_pub     = self.create_publisher(KeypointArray, '/keypoints',                    10)
+        self.inj_pub    = self.create_publisher(InjectionZone, '/injection_zone',               10)
 
-        # --- SETUP CSV ---
-        timestamp = datetime.now().strftime("%H%M%S")
-        directory = os.path.expanduser("~/cbrn_ws/csv")
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-            
-        self.csv_filename = os.path.join(directory, f"landmarks_vitpose_{timestamp}.csv")
-        self.csv_file = open(self.csv_filename, mode='w', newline='')
-        self.writer = csv.writer(self.csv_file)
-        
-        # Header standard COCO (17 puncte)
-        header = ["Timestamp"]
-        for i in range(17):
-            header.extend([f"KP_{i}_x", f"KP_{i}_y", f"KP_{i}_conf"])
-        self.writer.writerow(header)
-        
-        self.get_logger().info(f"ViTPose Pornit! Logare în: {self.csv_filename}")
+        # Subscribers
+        self.create_subscription(Image,      '/camera',                     self._img_cb,   10)
+        self.create_subscription(Image,      '/camera/depth',               self._depth_cb, 10)
+        self.create_subscription(CameraInfo, '/camera/camera_info',         self._info_cb,  10)
+        self.create_subscription(Odometry,   '/diff_drive_controller/odom', self._odom_cb,  10)
+        self.create_subscription(LaserScan,  '/scan',                       self._scan_cb,  10)
 
-    def depth_cb(self, msg):
-        self.depth_image = self.bridge.imgmsg_to_cv2(msg, "passthrough")
+        # State
+        self.depth_image    = None
+        self.focal_length   = 462.0
+        self.robot_x        = 0.0
+        self.robot_y        = 0.0
+        self.robot_yaw      = 0.0
+        self.lidar_min_dist = None
 
-    def img_cb(self, msg):
+        # CSV
+        log_dir = os.path.expanduser('~/bench_logs')
+        os.makedirs(log_dir, exist_ok=True)
+        ts       = datetime.now().strftime('%Y%m%d_%H%M%S')
+        csv_path = os.path.join(log_dir, f'metrics_vitpose_{ts}.csv')
+        self._csv_file = open(csv_path, mode='w', newline='')
+        self._csv      = csv.writer(self._csv_file)
+        header = (
+            ['Timestamp', 'Model', 'Detected', 'Inference_ms',
+             'Distance_m', 'BBox_W_px', 'BBox_H_px']
+            + [f'Conf_{n}' for n in CRITICAL_NAMES]
+            + ['Kpts_Above_Thresh', 'Body_Position',
+               'Injection_Zone', 'Zone_Conf',
+               'Goal_X', 'Goal_Y', 'Goal_Yaw', 'Goal_Valid']
+        )
+        self._csv.writerow(header)
+        self.get_logger().info(f'ViTPose detector ready. Metrics CSV → {csv_path}')
+
+    def _depth_cb(self, msg):
+        self.depth_image = self.bridge.imgmsg_to_cv2(msg, 'passthrough')
+
+    def _info_cb(self, msg):
+        if msg.k[0] > 0:
+            self.focal_length = msg.k[0]
+
+    def _odom_cb(self, msg):
+        p = msg.pose.pose.position
+        q = msg.pose.pose.orientation
+        self.robot_x = p.x
+        self.robot_y = p.y
+        siny = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        self.robot_yaw = math.atan2(siny, cosy)
+
+    def _scan_cb(self, msg):
+        valid = [r for r in msg.ranges if msg.range_min < r < msg.range_max]
+        self.lidar_min_dist = min(valid) if valid else None
+
+    def _img_cb(self, msg):
         try:
-            frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
         except Exception as e:
-            self.get_logger().error(f"Eroare convertire imagine: {e}")
+            self.get_logger().error(f'cv_bridge error: {e}')
             return
+        h, w = frame.shape[:2]
 
-        h, w, _ = frame.shape
+        t0     = time.perf_counter()
+        result = next(self.inferencer(frame, return_vis=False))
+        inf_ms = (time.perf_counter() - t0) * 1000.0
 
-        # --- INFERENȚĂ VITPOSE ---
-        # Inferencer returnează un generator, luăm primul rezultat
-        # return_vis=False ca să desenăm noi manual
-        result_generator = self.inferencer(frame, return_vis=False)
-        result = next(result_generator)
-        
-        # Structura result: {'predictions': [{'keypoints': [[x,y],..], 'keypoint_scores': [s,..], 'bbox': ...}]}
-        predictions = result['predictions']
+        predictions = result.get('predictions', [])
 
         target_msg = Point()
         target_msg.z = 0.0
 
-        if len(predictions) > 0:
-            persons = predictions[0]
-    
-            for person in persons:
-                keypoints = np.array(person['keypoints']) 
-                scores = np.array(person['keypoint_scores']) 
-                bbox = person['bbox'][0] # [x1, y1, x2, y2]
-            
-                # --- 1. EXPORT CSV ---
-                row = [time.time()]
-                for i in range(17):
-                    # Normalizăm coordonatele pentru CSV (0-1) cum făcea YOLO, pentru consistență
-                    norm_x = keypoints[i][0] / w
-                    norm_y = keypoints[i][1] / h
-                    row.extend([norm_x, norm_y, scores[i]])
-                self.writer.writerow(row)
+        kp_msg = KeypointArray()
+        kp_msg.header           = msg.header
+        kp_msg.model_name       = 'vitpose'
+        kp_msg.inference_time_ms = inf_ms
+        kp_msg.is_detected      = False
+        kp_msg.num_keypoints    = 17
 
-                # --- 2. VIZUALIZARE ---
-                # Desenăm puncte
-                for i, (kp, score) in enumerate(zip(keypoints, scores)):
-                    if score > CONFIDENCE_THRESHOLD:
-                        cx_kp, cy_kp = int(kp[0]), int(kp[1])
-                        cv2.circle(frame, (cx_kp, cy_kp), 5, (0, 255, 0), -1)
+        inj_msg = InjectionZone()
+        inj_msg.header        = msg.header
+        inj_msg.body_position = 'unknown'
+        inj_msg.zone_type     = 'unknown'
+        inj_msg.goal_valid    = False
 
-                # Desenez articulatii
-                SKELETON = [
-                    (5, 7), (7, 9),        # left arm
-                    (6, 8), (8, 10),       # right arm
-                    (5, 6),                # shoulders
-                    (5, 11), (6, 12),      # torso upper
-                    (11, 12),              # hips
-                    (11, 13), (13, 15),    # left leg
-                    (12, 14), (14, 16),    # right leg
-                    (0, 1), (0, 2),        # face
-                    (1, 3), (2, 4)
-                ]
+        csv_det  = False
+        csv_dist, csv_bw, csv_bh = 0.0, 0.0, 0.0
+        csv_crit  = [0.0] * len(CRITICAL_IDX)
+        csv_above = 0
+        csv_bpos  = 'unknown'
+        csv_zone, csv_zconf = 'none', 0.0
+        csv_gx = csv_gy = csv_gyaw = 0.0
+        csv_gvalid = False
 
-                for joint in SKELETON:
-                    p1, p2 = joint
+        if predictions and len(predictions[0]) > 0:
+            person     = predictions[0][0]   # first detected person
+            kp_pixels  = np.array(person['keypoints'])        # (17,2) pixels
+            scores     = np.array(person['keypoint_scores'])  # (17,)
+            bbox       = np.array(person['bbox'][0])          # [x1,y1,x2,y2]
 
-                    if scores[p1] > CONFIDENCE_THRESHOLD and scores[p2] > CONFIDENCE_THRESHOLD:
-                        x1, y1 = int(keypoints[p1][0]), int(keypoints[p1][1])
-                        x2, y2 = int(keypoints[p2][0]), int(keypoints[p2][1])
+            # Normalize keypoints to [0,1] for consistent KeypointArray format
+            kp_xy_norm = np.column_stack([kp_pixels[:, 0] / w,
+                                           kp_pixels[:, 1] / h])
+            kp_conf    = scores.tolist()
 
-                        cv2.line(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
-                        
-                # Desenăm Bounding Box
-                x1, y1, x2, y2 = map(int, bbox)
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-                
-                # --- 3. CALCUL DISTANȚĂ ȘI TARGET ---
-                cx = int((x1 + x2) / 2)
-                cy = int((y1 + y2) / 2)
-                
-                dist = 5.0
-                if self.depth_image is not None:
-                    try:
-                        cy_safe = min(max(cy, 0), h-1)
-                        cx_safe = min(max(cx, 0), w-1)
-                        dist = float(self.depth_image[cy_safe, cx_safe])
-                        if np.isnan(dist) or dist <= 0: dist = 5.0
-                    except: pass
+            x1, y1, x2, y2 = bbox
+            bw = x2 - x1;  bh = y2 - y1
 
-                target_msg.x = float((cx / w) - 0.5)
-                target_msg.y = float(cy)
-                target_msg.z = float(dist)
-        
+            kp_msg.is_detected    = True
+            kp_msg.kp_x           = kp_xy_norm[:, 0].tolist()
+            kp_msg.kp_y           = kp_xy_norm[:, 1].tolist()
+            kp_msg.kp_conf        = kp_conf
+            kp_msg.bbox_x1, kp_msg.bbox_y1 = float(x1), float(y1)
+            kp_msg.bbox_x2, kp_msg.bbox_y2 = float(x2), float(y2)
+            kp_msg.bbox_width_px  = float(bw)
+            kp_msg.bbox_height_px = float(bh)
+
+            csv_det  = True
+            csv_bw, csv_bh = bw, bh
+            csv_crit  = [kp_conf[i] for i in CRITICAL_IDX]
+            csv_above = int(np.sum(scores > CONF_THRESHOLD))
+
+            # Distance
+            dist_m = estimate_distance_from_bbox(bw, bh, self.focal_length)
+            if dist_m is None and self.lidar_min_dist is not None:
+                dist_m = self.lidar_min_dist
+            if dist_m is None:
+                dist_m = 0.0
+            csv_dist = dist_m
+            inj_msg.distance_m = dist_m
+
+            # Body position
+            body_pos = classify_body_position(kp_conf)
+            csv_bpos = body_pos
+            inj_msg.body_position = body_pos
+
+            # Injection zone
+            zone = select_injection_zone(kp_xy_norm, kp_conf, body_pos, w, h)
+            if zone:
+                zone_type, zone_px, zone_py, zone_conf = zone
+                csv_zone, csv_zconf = zone_type, zone_conf
+                inj_msg.zone_type  = zone_type
+                inj_msg.pixel_x    = float(zone_px)
+                inj_msg.pixel_y    = float(zone_py)
+                inj_msg.confidence = zone_conf
+
+                cv2.circle(frame, (zone_px, zone_py), 12, (0, 0, 255), -1)
+                cv2.circle(frame, (zone_px, zone_py), 14, (255, 255, 255), 2)
+                cv2.putText(frame, zone_type, (zone_px + 15, zone_py),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+                if dist_m > 0.05:
+                    gx, gy, gyaw = compute_nav2_goal(
+                        zone_px, w, self.focal_length,
+                        dist_m, self.robot_x, self.robot_y, self.robot_yaw)
+                    inj_msg.nav_goal_x   = gx
+                    inj_msg.nav_goal_y   = gy
+                    inj_msg.nav_goal_yaw = gyaw
+                    inj_msg.goal_valid   = True
+                    csv_gx, csv_gy, csv_gyaw, csv_gvalid = gx, gy, gyaw, True
+
+            # Draw skeleton + bounding box
+            cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
+            for i, (kp, score) in enumerate(zip(kp_pixels, scores)):
+                if score > CONF_THRESHOLD:
+                    cv2.circle(frame, (int(kp[0]), int(kp[1])), 5, (0, 255, 0), -1)
+            for p1, p2 in SKELETON:
+                if scores[p1] > CONF_THRESHOLD and scores[p2] > CONF_THRESHOLD:
+                    pt1 = (int(kp_pixels[p1][0]), int(kp_pixels[p1][1]))
+                    pt2 = (int(kp_pixels[p2][0]), int(kp_pixels[p2][1]))
+                    cv2.line(frame, pt1, pt2, (0, 255, 255), 2)
+
+            cx = int((x1 + x2) / 2)
+            cy = int((y1 + y2) / 2)
+            target_msg.x = float((cx / w) - 0.5)
+            target_msg.y = float(cy)
+            target_msg.z = float(dist_m)
+
+        cv2.putText(frame, f'ViTPose | {inf_ms:.1f} ms | {csv_bpos}',
+                    (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 0), 2)
+
         self.target_pub.publish(target_msg)
+        self.kp_pub.publish(kp_msg)
+        self.inj_pub.publish(inj_msg)
+        try:
+            out = self.bridge.cv2_to_imgmsg(frame, encoding='bgr8')
+            out.header = msg.header
+            self.result_pub.publish(out)
+        except Exception as e:
+            self.get_logger().error(f'Image publish error: {e}')
 
-        # Publicare imagine procesată
-        out_msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
-        out_msg.header = msg.header
-        self.result_image_pub.publish(out_msg)
+        self._csv.writerow(
+            [time.time(), 'vitpose', int(csv_det), f'{inf_ms:.2f}',
+             f'{csv_dist:.3f}', f'{csv_bw:.1f}', f'{csv_bh:.1f}']
+            + [f'{c:.3f}' for c in csv_crit]
+            + [csv_above, csv_bpos, csv_zone, f'{csv_zconf:.3f}',
+               f'{csv_gx:.3f}', f'{csv_gy:.3f}', f'{csv_gyaw:.4f}', int(csv_gvalid)]
+        )
+        self._csv_file.flush()
 
-        cv2.imshow("ViTPose Detector", frame)
+        cv2.imshow('ViTPose View', frame)
         cv2.waitKey(1)
+
+    def destroy_node(self):
+        self._csv_file.close()
+        super().destroy_node()
+
 
 def main():
     rclpy.init()
@@ -193,6 +367,5 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        node.csv_file.close()
         node.destroy_node()
         rclpy.shutdown()
