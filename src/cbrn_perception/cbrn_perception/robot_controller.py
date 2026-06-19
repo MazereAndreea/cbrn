@@ -168,12 +168,14 @@ class RobotController(Node):
         self.get_logger().info(f'Model auto-detected: {msg.model_name} → {new_path}')
 
     def _odom_cb(self, msg: Odometry):
-        p = msg.pose.pose.position
-        q = msg.pose.pose.orientation
+        p = msg.pose.pose.position # extrage poziția (x,y,z) a robotului
+        q = msg.pose.pose.orientation # poziția + orientare (x,y,z,w)
         self._robot_x = p.x
         self._robot_y = p.y
+        # Formule pentru extragerea yaw-ului (rotație in jurul axei verticale z)
         siny = 2.0 * (q.w * q.z + q.x * q.y)
         cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        # Returnează unghi care reprezintă direcția in care priveste robotul
         self._robot_yaw = math.atan2(siny, cosy)
         if self._start_x is None:
             self._start_x = p.x
