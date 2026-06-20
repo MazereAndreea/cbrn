@@ -14,26 +14,58 @@ Mediul de simulare include:
 * Un model 3D al unui pacient, descărcat de pe [human-gazebo](https://github.com/robotology/human-gazebo) și rotit pentru a simula o persoană culcată.
 
 ```text
-cbrn/
+cbrn/                                    # Workspace ROS2 (colcon)
 ├── src/
-│   ├── sim_env/                  # Pachetul principal de simulare (Gazebo)
-│   │   ├── launch/               # Scripturi de lansare a lumii și a robotului
-│   │   ├── models/               # Fișierele 3D ale mediului (ex. modelul human-gazebo)
-│   │   ├── urdf/                 # Descrierea cinematică și senzorii robotului (Xacro)
-│   │   └── worlds/               # Scenariile de test (ex. cbrn_world.world)
+│   ├── sim_env/                         # Pachet de simulare Gazebo (ament_cmake)
+│   │   ├── description/                 # Descrierea robotului (URDF/Xacro)
+│   │   │   ├── cbrn_robot.urdf.xacro    # Fișier principal include modulele de mai jos
+│   │   │   ├── robot_core.xacro         # Descrie dimensiunile pentru șasiu, roți și caster
+│   │   │   ├── camera.xacro             # Joint + link cameră pe chassis
+│   │   │   ├── camera_sensor_macro.xacro # Descrie senzorul RGB-D
+│   │   │   ├── ros2_control.xacro       # ros2_control + plugin gz_ros2_control
+│   │   │   └── inertial_macros.xacro    # Macro-uri de inerție (box/cylinder/sphere)
+│   │   ├── launch/
+│   │   │   └── start_sim.launch.py      # URDF→SDF, spawn robot, bridge, RViz2, controllere
+│   │   ├── config/
+│   │   │   ├── camera.yaml              # Maparea ros_gz_bridge (/clock, /camera, /camera/depth)
+│   │   │   └── my_controllers.yaml      # diff_drive_controller + joint_state_broadcaster
+│   │   ├── rviz/
+│   │   │   └── sim.rviz                 # Configurarea vizualizării RViz2
+│   │   ├── worlds/
+│   │   │   └── cbrn_world.world         # Lume CBRN: sol, lumină, person1 + person2
+│   │   ├── models/
+│   │   │   └── person_standing/         # model.config + model.sdf + meshes/ (MakeHuman)
+│   │   ├── CMakeLists.txt               # Instalează launch/ config/ description/ worlds/ models/ rviz/
+│   │   └── package.xml                  # Manifest ament_cmake (ros_gz_sim, ros_gz_bridge)
 │   │
-│   ├── cbrn_interfaces/          # Pachet pentru mesaje customizate
-│   │   └── msg/
-│   │       └── PerceptionMetrics.msg  # Structura datelor analitice
+│   ├── cbrn_interfaces/                 # Pachet de mesaje custom (ament_cmake + rosidl)
+│   │   ├── msg/
+│   │   │   ├── PerceptionMetrics.msg    # model_name, inference_time, confidence, distance
+│   │   │   ├── KeypointArray.msg        # kp_x/kp_y/kp_conf normalizate + bbox + model_name
+│   │   │   └── InjectionZone.msg        # zone_type, body_position, pixel, distance, Nav2Goal
+│   │   ├── CMakeLists.txt               # rosidl_generate_interfaces pentru cele 3 mesaje
+│   │   └── package.xml                  # Manifest cu rosidl_default_generators/runtime
 │   │
-│   └── cbrn_perception/          # Pachetul de Inteligență Artificială (MMPose)
-│       ├── mmpose_detector.py    # Nodul principal de detecție 2D
-│       ├── colector_live.py      # Nod pentru navigație și logging (Benchmarking)
-│       └── pipeline_benchmarking.sh # Automatizarea testelor pe 170+ modele
-│
-├── build/                        # Fisiere binare generate (ignorat in git)
-├── install/                      # Fisiere executabile și scripturi setup (ignorat in git)
-└── log/                          # Jurnalele de execuție ROS 2
+│   ├── cbrn_perception/                 # Pachet de percepție și control (ament_python)
+│   │   ├── cbrn_perception/
+│   │   │   ├── mediapipe_detector.py    # class MediaPipeDetector(Node) — 33 keypoints
+│   │   │   ├── yolo_detector.py         # class YoloDetector(Node) — COCO 17
+│   │   │   ├── movenet_detector.py      # class MoveNetDetector(Node) — TFLite, 256×256
+│   │   │   ├── vitpose_detector.py      # class ViTPoseDetector(Node) — OpenMMLab
+│   │   │   ├── injection_zone_analyzer.py # class InjectionZoneAnalyzer(Node) — nod standalone
+│   │   │   └── robot_controller.py      # class RobotController(Node) — mașina de stări 4 faze + logging 
+│   │   ├── setup.py                     # entry_points
+│   │   ├── setup.cfg                    # Config ament_python
+│   │   └── package.xml                  # Manifest ament_python
+│   │
+│   └── scripts/                         # Scripturi de rulare
+│       ├── compile_act_run.bash         # Pas 1: curăță, recompilează, lansează simularea
+│       ├── run_bench.sh                 # Pas 3: resetează robotul la (-3,0) și pornește mașina de stări
+│       └── send_cmd_vel.py              # Utilitar TwistStamped pe /diff_drive_controller/cmd_vel
+│ 
+├── build/                              # Artefacte colcon
+├── install/                            # Fișiere de instalare/setup 
+└── log/                                # Jurnalele de execuție colcon/ROS2
 ```
 ## 🛠️ Mediul de Dezvoltare și Dependințe
 
