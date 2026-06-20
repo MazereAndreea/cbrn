@@ -147,14 +147,16 @@ def select_injection_zone(kp_x_norm, kp_y_norm, kp_conf, idx, body_pos,
 def estimate_distance(bbox_w_px, bbox_h_px, focal_length,
                        lidar_dist=None, ref_m=0.45):
     """
-    Primary: pinhole model D = (f * W_ref) / W_px using bbox larger dimension.
-    Fallback: LiDAR minimum distance in front of robot.
+    pinhole model D = (f * W_ref) / W_px using bbox larger dimension.
     """
+    # Selectăm dimensiunea maximă a cutiei de încadrare (lățime sau înălțime) 
+    # pentru a minimiza eroarea indusă de posturi asimetrice (ex. persoană întinsă vs. în picioare).
     ref_px = max(bbox_w_px, bbox_h_px)
+    # Evităm împărțirea la zero și respingem detecțiile false/zgomotul (sub 10 pixeli).
     if ref_px > 10 and focal_length > 0:
         return (focal_length * ref_m) / ref_px
-    if lidar_dist is not None:
-        return lidar_dist
+    #if lidar_dist is not None:
+    #    return lidar_dist
     return 0.0
 
 
@@ -166,13 +168,30 @@ def compute_nav2_goal(zone_px, frame_w, focal_length, dist_m,
     Uses horizontal angle only (floor-plane 2-D navigation).
     Returns (goal_x, goal_y, approach_yaw).
     """
+    # 1. Calculul unghiului orizontal față de centrul optic al camerei.
+    # Se face conversia din diferența de pixeli (relativ la centrul cadrului) într-un unghi real (radiani).                       
     angle_h  = math.atan2(zone_px - frame_w / 2.0, focal_length)
+                           
+    # 2. Trecerea din coordonate polare (distanță, unghi) în coordonate carteziene locale (frame robot).
+    # zone_r_x reprezintă distanța "în față", iar zone_r_y deviația "stânga/dreapta".                       
     zone_r_x = dist_m * math.cos(angle_h)
     zone_r_y = dist_m * math.sin(angle_h)
+                           
+    # Extragem componentele trigonometrice ale orientării curente a robotului.
     cos_y, sin_y = math.cos(robot_yaw), math.sin(robot_yaw)
+                           
+    # 3. Transformare de coordonate din frame-ul robotului în frame-ul global (hartă/odometrie).
+    # Se aplică o matrice de rotație 2D și o translație cu poziția curentă a robotului.                       
     zone_m_x = robot_x + zone_r_x * cos_y - zone_r_y * sin_y
     zone_m_y = robot_y + zone_r_x * sin_y + zone_r_y * cos_y
+
+    # 4. Calculul orientării ideale de apropiere (yaw).
+    # Robotul trebuie să se orienteze cu fața către coordonatele globale ale zonei de injecție.                       
     approach_yaw = math.atan2(zone_m_y - robot_y, zone_m_x - robot_x)
+
+    # 5. Aplicarea offset-ului de lucru (distanța de siguranță/operare).
+    # Nu vrem ca baza robotului să se suprapună cu ținta, ci să se oprească la o distanță prescrisă (work_offset)
+    # de-a lungul vectorului de apropiere. Scădem această distanță din coordonatele finale.                       
     goal_x = zone_m_x - work_offset * math.cos(approach_yaw)
     goal_y = zone_m_y - work_offset * math.sin(approach_yaw)
     return goal_x, goal_y, approach_yaw
